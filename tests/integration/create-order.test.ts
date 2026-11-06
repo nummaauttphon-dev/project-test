@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import pg from "pg";
+import type pg from "pg";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   adminClient,
@@ -9,6 +9,7 @@ import {
   seedProduct,
   type Product,
 } from "../helpers/supabase";
+import { connect, waitUntilBlocked } from "../helpers/pg";
 
 const SHIPPING = 5000;
 const SIGNATURES = [
@@ -99,12 +100,6 @@ async function setSettings(values: { shipping_fee_satang?: number; payment_windo
   if (error) throw new Error(`setSettings: ${error.message}`);
 }
 
-async function connect(): Promise<pg.Client> {
-  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-  await client.connect();
-  return client;
-}
-
 /** Inserts an order row inside an open transaction, invisible to other sessions until commit. */
 async function insertOrderInTx(client: pg.Client, key: string): Promise<string> {
   const { rows } = await client.query<{ id: string }>(
@@ -116,34 +111,6 @@ async function insertOrderInTx(client: pg.Client, key: string): Promise<string> 
     [tokenHashFor(key), key],
   );
   return rows[0].id;
-}
-
-/** Waits until the pending create_order call is parked on a heavyweight lock. */
-async function waitUntilBlocked(observer: pg.Client, pending: Promise<PlaceResult>): Promise<void> {
-  let settled = false;
-  const finished = pending.then(
-    () => {
-      settled = true;
-      throw new Error("create_order finished without blocking");
-    },
-    (error: unknown) => {
-      settled = true;
-      throw error;
-    },
-  );
-  const poll = async () => {
-    const deadline = Date.now() + 10000;
-    while (!settled && Date.now() < deadline) {
-      const { rows } = await observer.query<{ n: string }>(
-        `select count(*) as n from pg_stat_activity
-         where wait_event_type = 'Lock' and query ilike '%create_order%'`,
-      );
-      if (Number(rows[0].n) > 0) return;
-      await new Promise((resolve) => setTimeout(resolve, 25));
-    }
-    if (!settled) throw new Error("create_order never blocked on a lock");
-  };
-  await Promise.race([poll(), finished]);
 }
 
 describe("create_order", () => {
@@ -300,7 +267,7 @@ describe("create_order", () => {
       await holder.query("update public.products set stock_quantity = 0 where id = $1", [product.id]);
 
       const pending = placeRpc(product, key);
-      await waitUntilBlocked(observer, pending);
+      await waitUntilBlocked(observer, pending, "create_order");
       await holder.query("commit");
 
       const result = await pending;
@@ -319,7 +286,7 @@ describe("create_order", () => {
       const orderId = await insertOrderInTx(holder, key);
 
       const pending = placeRpc(product, key);
-      await waitUntilBlocked(observer, pending);
+      await waitUntilBlocked(observer, pending, "create_order");
       await holder.query("commit");
 
       const result = await pending;
@@ -630,7 +597,7 @@ describe("create_order", () => {
 
       // The expectation matches the old price, which is still the committed one at this point.
       const pending = place([{ product_id: product.id, quantity: 1 }], 1000 + SHIPPING);
-      await waitUntilBlocked(observer, pending);
+      await waitUntilBlocked(observer, pending, "create_order");
       await holder.query("commit");
 
       const result = await pending;
@@ -667,7 +634,7 @@ describe("create_order", () => {
         ],
         high.price_satang + low.price_satang + SHIPPING,
       );
-      await waitUntilBlocked(observer, pending);
+      await waitUntilBlocked(observer, pending, "create_order");
 
       const { rowCount } = await observer.query(
         "select 1 from public.products where id = $1 for update skip locked",
