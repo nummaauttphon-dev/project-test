@@ -117,10 +117,9 @@ begin
     return jsonb_build_object('ok', false, 'code', 'NOT_FOUND');
   end if;
 
-  -- The status table of the design spec, section 3. "is not true": p_to may be null.
+  -- The status table of the design spec, section 3, except for payment_review and expired, which
+  -- only submit_payment_slip and expire_orders may enter. "is not true": p_to may be null.
   if ((v_from, p_to) in (
-    ('awaiting_payment', 'payment_review'),
-    ('awaiting_payment', 'expired'),
     ('awaiting_payment', 'cancelled'),
     ('payment_review', 'paid'),
     ('payment_review', 'awaiting_payment'),
@@ -128,6 +127,16 @@ begin
     ('paid', 'shipped'),
     ('paid', 'cancelled')
   )) is not true then
+    return jsonb_build_object('ok', false, 'code', 'INVALID_TRANSITION');
+  end if;
+
+  -- An order is never paid without a slip to review. The order lock keeps this true until the
+  -- update below, since submit_payment_slip takes the same lock.
+  if p_to = 'paid' and not exists (
+    select 1
+    from public.payment_slips as s
+    where s.order_id = p_order_id and s.review_status = 'pending'
+  ) then
     return jsonb_build_object('ok', false, 'code', 'INVALID_TRANSITION');
   end if;
 
@@ -162,7 +171,7 @@ begin
     end if;
   end if;
 
-  if p_to in ('cancelled', 'expired') then
+  if p_to = 'cancelled' then
     perform public.restock_orders(array[p_order_id]);
   end if;
 
@@ -182,7 +191,7 @@ begin
       end,
       tracking_number = case when p_to = 'shipped' then v_tracking else o.tracking_number end,
       terminal_at = case
-        when p_to in ('shipped', 'cancelled', 'expired') then now()
+        when p_to in ('shipped', 'cancelled') then now()
         else o.terminal_at
       end
   where o.id = p_order_id;

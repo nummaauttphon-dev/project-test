@@ -25,9 +25,9 @@ const STATUSES = [
 ] as const;
 type Status = (typeof STATUSES)[number];
 
+// What transition_order accepts: the spec table without payment_review and expired, which only
+// submit_payment_slip and expire_orders may enter.
 const ALLOWED: [Status, Status][] = [
-  ["awaiting_payment", "payment_review"],
-  ["awaiting_payment", "expired"],
   ["awaiting_payment", "cancelled"],
   ["payment_review", "paid"],
   ["payment_review", "awaiting_payment"],
@@ -130,6 +130,19 @@ async function setWindow(minutes: number): Promise<void> {
     .update({ payment_window_minutes: minutes })
     .eq("id", 1);
   if (error) throw new Error(`setWindow: ${error.message}`);
+}
+
+/** Inserts a slip directly, for states the functions alone would not produce. */
+async function seedSlip(orderId: string, reviewStatus: SlipRow["review_status"]): Promise<void> {
+  const { error } = await adminClient()
+    .from("payment_slips")
+    .insert({
+      order_id: orderId,
+      storage_path: `${orderId}/${randomUUID()}.png`,
+      review_status: reviewStatus,
+      reject_reason: reviewStatus === "rejected" ? "เหตุผลเดิม" : null,
+    });
+  if (error) throw new Error(`seedSlip: ${error.message}`);
 }
 
 /** Places a real order through create_order, so stock has actually been taken. */
@@ -336,9 +349,88 @@ describe("order lifecycle", () => {
 
     it.each(ALLOWED)("allows %s -> %s", async (from, to) => {
       const order = await seedOrder({ status: from });
+      if (from === "payment_review") await seedSlip(order.id, "pending");
       const result = await transition(order.id, to, { reason: "เหตุผล", tracking: "TH1" });
       expect(result).toEqual({ ok: true, status: to });
       expect((await orderRow(order.id)).status).toBe(to);
+    });
+
+    it.each(["payment_review", "expired"] as const)(
+      "keeps %s reachable only through its own function",
+      async (to) => {
+        const product = await seedProduct({ stock_quantity: 5 });
+        const id = await placeOrder([[product, 2]]);
+        await setExpiresAt(id, to === "expired" ? PAST : new Date(Date.now() + 3600000).toISOString());
+        const before = await orderRow(id);
+
+        const result = await transition(id, to, { reason: "เหตุผล", tracking: "TH1" });
+
+        expect(result).toEqual({ ok: false, code: "INVALID_TRANSITION" });
+        expect(await orderRow(id)).toEqual(before);
+        expect(await stockOf(product.id)).toBe(3);
+
+        if (to === "expired") {
+          expect(await expireOrders()).toBe(1);
+          expect(await stockOf(product.id)).toBe(5);
+        } else {
+          expect(await submit(id)).toEqual({ ok: true, status: "payment_review" });
+        }
+        expect((await orderRow(id)).status).toBe(to);
+      },
+    );
+
+    it("rejects awaiting_payment -> paid even with a pending slip", async () => {
+      const order = await seedOrder();
+      await seedSlip(order.id, "pending");
+      expect(await transition(order.id, "paid")).toEqual({ ok: false, code: "INVALID_TRANSITION" });
+      expect((await orderRow(order.id)).status).toBe("awaiting_payment");
+      expect((await slipsOf(order.id))[0].review_status).toBe("pending");
+    });
+
+    it("cannot take an order with no slip to paid by any route", async () => {
+      const order = await seedOrder();
+      for (const to of ["paid", "payment_review", "paid", "shipped", "paid"] as const) {
+        const result = await transition(order.id, to, { reason: "เหตุผล", tracking: "TH1" });
+        expect(result).toEqual({ ok: false, code: "INVALID_TRANSITION" });
+        expect((await orderRow(order.id)).status).toBe("awaiting_payment");
+      }
+      expect(await slipsOf(order.id)).toEqual([]);
+    });
+
+    it("rejects payment_review -> paid when no slip exists", async () => {
+      const order = await seedOrder({ status: "payment_review" });
+      const before = await orderRow(order.id);
+      expect(await transition(order.id, "paid")).toEqual({ ok: false, code: "INVALID_TRANSITION" });
+      expect(await orderRow(order.id)).toEqual(before);
+    });
+
+    it.each(["approved", "rejected"] as const)(
+      "rejects payment_review -> paid when the only slip is %s",
+      async (reviewStatus) => {
+        const order = await seedOrder({ status: "payment_review" });
+        await seedSlip(order.id, reviewStatus);
+        const before = await orderRow(order.id);
+        const slipsBefore = await slipsOf(order.id);
+
+        expect(await transition(order.id, "paid")).toEqual({
+          ok: false,
+          code: "INVALID_TRANSITION",
+        });
+
+        expect(await orderRow(order.id)).toEqual(before);
+        expect(await slipsOf(order.id)).toEqual(slipsBefore);
+      },
+    );
+
+    it("rejects paying an order whose slip was rejected, until a new slip arrives", async () => {
+      const product = await seedProduct();
+      const id = await orderIn("payment_review", [[product, 1]]);
+      await reject(id);
+      expect(await approve(id)).toEqual({ ok: false, code: "INVALID_TRANSITION" });
+      expect((await orderRow(id)).status).toBe("awaiting_payment");
+
+      expect((await submit(id)).ok).toBe(true);
+      expect(await approve(id)).toEqual({ ok: true, status: "paid" });
     });
 
     it("covers every status pair", () => {
