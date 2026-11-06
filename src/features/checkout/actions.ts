@@ -9,6 +9,8 @@ import { placeOrder, type PlaceOrderData } from "./place-order";
 export async function placeOrderAction(input: unknown): Promise<ActionResult<PlaceOrderData>> {
   try {
     const h = await headers();
+    // Trust assumption: the hosting platform overwrites x-real-ip and x-forwarded-for with the
+    // real client address, so a client cannot choose its own rate-limit subject.
     const ip = h.get("x-real-ip")?.trim() || h.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
     const env = serverEnv();
     return await placeOrder(input, {

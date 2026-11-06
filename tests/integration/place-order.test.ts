@@ -220,3 +220,30 @@ describe("placeOrder", () => {
     });
   });
 });
+
+describe("placeOrder retry with different contact data", () => {
+  it("reports no mismatch for a new order and for an identical retry", async () => {
+    const product = await seedProduct();
+    const body = one(product);
+    expect(data(await placeOrder(body, deps()))).toMatchObject({ kind: "created", contactMismatch: false });
+    // Same data, only spacing differs after normalization.
+    const retry = { ...body, customerName: "  สมชาย  ใจดี ", phone: "0812345678" };
+    expect(data(await placeOrder(retry, deps()))).toMatchObject({ kind: "created", contactMismatch: false });
+  });
+
+  it.each([
+    ["customerName", "สมหญิง ใจงาม"],
+    ["phone", "0899999999"],
+    ["shippingAddress", "999 ถนนใหม่ แขวงใหม่ เขตใหม่ เชียงใหม่ 50000"],
+  ])("flags a retry that changes %s and returns no stored values", async (field, value) => {
+    const product = await seedProduct();
+    const body = one(product);
+    await placeOrder(body, deps());
+    const result = data(await placeOrder({ ...body, [field]: value }, deps()));
+    expect(result).toMatchObject({ kind: "created", contactMismatch: true });
+    expect(Object.keys(result).sort()).toEqual(["contactMismatch", "kind", "token"]);
+    const rows = await orderRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0][field === "customerName" ? "customer_name" : field === "phone" ? "phone" : "shipping_address"]).not.toBe(value);
+  });
+});

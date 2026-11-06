@@ -25,11 +25,48 @@ const UNKNOWN_OUTCOME =
 const INPUT_CLASS =
   "mt-1 block min-h-12 w-full rounded-lg border border-line-strong bg-surface px-3 text-base aria-[invalid=true]:border-danger-ink";
 
-function describeChanges(changes: OrderChange[], names: Map<string, string>, total: number): string[] {
+const ATTEMPT_STORAGE_KEY = "checkout.attempt.v1";
+const LOAD_ERROR = "โหลดตะกร้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
+const MISMATCH_MESSAGE =
+  "ระบบสร้างคำสั่งซื้อไปแล้วด้วยข้อมูลที่ส่งครั้งแรก ระบบไม่ได้ใช้การแก้ไขชื่อ เบอร์โทร หรือที่อยู่ที่เพิ่งกรอก หากต้องการเปลี่ยนข้อมูล กรุณาติดต่อร้านค้า (ดูช่องทางติดต่อได้ที่หน้าคำสั่งซื้อ)";
+
+type Attempt = { fingerprint: string; key: string };
+
+// The attempt (items + total + key) survives a reload, so a reload after an unknown outcome
+// resubmits with the same key. It holds no customer data. If storage is blocked, memory is used.
+function readAttempt(): Attempt | null {
+  try {
+    const raw = window.sessionStorage.getItem(ATTEMPT_STORAGE_KEY);
+    const value: unknown = raw ? JSON.parse(raw) : null;
+    if (typeof value === "object" && value !== null) {
+      const { fingerprint, key } = value as Record<string, unknown>;
+      if (typeof fingerprint === "string" && typeof key === "string") return { fingerprint, key };
+    }
+  } catch {
+    // fall through to memory
+  }
+  return null;
+}
+
+function writeAttempt(attempt: Attempt | null) {
+  try {
+    if (attempt) window.sessionStorage.setItem(ATTEMPT_STORAGE_KEY, JSON.stringify(attempt));
+    else window.sessionStorage.removeItem(ATTEMPT_STORAGE_KEY);
+  } catch {
+    // the copy in keyRef still works
+  }
+}
+
+function describeChanges(
+  changes: OrderChange[],
+  names: Map<string, string>,
+  total: number,
+  anythingLeft: boolean,
+): string[] {
   const label = (id: string) => names.get(id) ?? "สินค้า";
   const messages: string[] = [];
   for (const change of changes) {
-    if (change.reason === "unavailable") {
+    if (change.reason === "unavailable" || (change.reason === "insufficient_stock" && change.available_quantity <= 0)) {
       messages.push(`${label(change.product_id)} หมดหรือไม่มีจำหน่ายแล้ว จึงนำออกจากตะกร้า`);
     } else if (change.reason === "insufficient_stock") {
       messages.push(`${label(change.product_id)} เหลือ ${change.available_quantity} ชิ้น จึงปรับจำนวนในตะกร้า`);
@@ -37,6 +74,10 @@ function describeChanges(changes: OrderChange[], names: Map<string, string>, tot
   }
   // price_changed is reported on every line when the total differs, and the cause may be the
   // shipping fee, so it never claims that a particular product changed price.
+  if (!anythingLeft) {
+    messages.push("ตะกร้าไม่มีสินค้าที่สั่งซื้อได้เหลืออยู่ กรุณาเลือกสินค้าใหม่");
+    return messages;
+  }
   messages.push(`ยอดรวมทั้งหมดเปลี่ยนเป็น ${formatBaht(total)} กรุณาตรวจสอบยอดแล้วกดยืนยันสั่งซื้ออีกครั้ง`);
   return messages;
 }
@@ -51,14 +92,14 @@ export function CheckoutForm() {
   const [formError, setFormError] = useState("");
   const [notices, setNotices] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
-  const [done, setDone] = useState(false);
+  const [placed, setPlaced] = useState<{ token: string; mismatch: boolean } | null>(null);
 
   const linesRef = useRef<CartLine[]>(lines);
   const namesRef = useRef(new Map<string, string>());
   const submittingRef = useRef(false);
   // One key per distinct order (items + total). Reused while the order data is unchanged, so a
   // double click, a retry after a network failure and a reconfirm all map to the same order.
-  const keyRef = useRef<{ fingerprint: string; key: string } | null>(null);
+  const keyRef = useRef<Attempt | null>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
   const fieldRefs = useRef<Partial<Record<FieldName, HTMLInputElement | HTMLTextAreaElement | null>>>({});
 
@@ -68,17 +109,27 @@ export function CheckoutForm() {
 
   /** Loads the latest products and aligns the stored cart with them. */
   const refresh = useCallback(
-    async (requested: CartLine[]): Promise<Load> => {
-      if (requested.length === 0) return { state: "done", data: { products: [], shippingFeeSatang: 0 } };
+    async (requested: CartLine[]): Promise<{ load: Load; remaining: number; notices: string[] }> => {
+      if (requested.length === 0) {
+        return { load: { state: "done", data: { products: [], shippingFeeSatang: 0 } }, remaining: 0, notices: [] };
+      }
       const result = await getCartViewAction(requested);
-      if (!result.ok) return { state: "error", message: result.message };
+      if (!result.ok) return { load: { state: "error", message: result.message }, remaining: 0, notices: [] };
       for (const p of result.data.products) namesRef.current.set(p.id, p.name);
       const { lines: kept, removed, adjusted } = reconcileCart(requested, result.data.products);
+      const notices: string[] = [];
+      if (removed.length > 0) {
+        notices.push(`นำสินค้า ${removed.length} รายการที่หมดหรือไม่มีจำหน่ายแล้วออกจากตะกร้า`);
+      }
+      for (const id of adjusted) {
+        const quantity = kept.find((line) => line.productId === id)?.quantity;
+        notices.push(`ปรับจำนวน ${namesRef.current.get(id) ?? "สินค้า"} เหลือ ${quantity} ชิ้น ตามสต็อกที่มีอยู่`);
+      }
       if (removed.length > 0 || adjusted.length > 0) {
         setLines(kept);
         linesRef.current = kept;
       }
-      return { state: "done", data: result.data };
+      return { load: { state: "done", data: result.data }, remaining: kept.length, notices };
     },
     [setLines],
   );
@@ -88,10 +139,12 @@ export function CheckoutForm() {
     let cancelled = false;
     refresh(linesRef.current)
       .then((next) => {
-        if (!cancelled) setLoad(next);
+        if (cancelled) return;
+        setNotices(next.notices);
+        setLoad(next.load);
       })
       .catch(() => {
-        if (!cancelled) setLoad({ state: "error", message: "โหลดตะกร้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" });
+        if (!cancelled) setLoad({ state: "error", message: LOAD_ERROR });
       });
     return () => {
       cancelled = true;
@@ -129,8 +182,12 @@ export function CheckoutForm() {
       items: [...items].sort((a, b) => a.productId.localeCompare(b.productId)),
       total,
     });
-    if (keyRef.current?.fingerprint !== fingerprint) {
+    const known = keyRef.current ?? readAttempt();
+    if (known?.fingerprint === fingerprint) {
+      keyRef.current = known;
+    } else {
       keyRef.current = { fingerprint, key: generateIdempotencyKey() };
+      writeAttempt(keyRef.current);
     }
 
     let succeeded = false;
@@ -153,18 +210,26 @@ export function CheckoutForm() {
         return;
       }
       if (result.data.kind === "changed") {
-        const messages = describeChanges(result.data.changes, namesRef.current, result.data.currentTotalSatang);
-        const next = await refresh(linesRef.current).catch(
-          (): Load => ({ state: "error", message: "โหลดตะกร้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง" }),
+        const names = new Map(namesRef.current);
+        const next = await refresh(linesRef.current).catch(() => null);
+        setLoad(next?.load ?? { state: "error", message: LOAD_ERROR });
+        setNotices(
+          describeChanges(result.data.changes, names, result.data.currentTotalSatang, (next?.remaining ?? 1) > 0),
         );
-        setLoad(next);
-        setNotices(messages);
         return;
       }
       succeeded = true;
-      setDone(true);
+      keyRef.current = null;
+      writeAttempt(null);
+      const { token, contactMismatch } = result.data;
+      setPlaced({ token, mismatch: contactMismatch });
       setLines([]); // clear the cart only now that the order exists
-      router.push(`/orders/${result.data.token}`);
+      if (contactMismatch) {
+        setFormError(MISMATCH_MESSAGE);
+        requestAnimationFrame(() => summaryRef.current?.focus());
+      } else {
+        router.push(`/orders/${token}`);
+      }
     } catch {
       setFormError(UNKNOWN_OUTCOME);
       requestAnimationFrame(() => summaryRef.current?.focus());
@@ -208,11 +273,20 @@ export function CheckoutForm() {
     </>
   );
 
-  if (done) {
+  if (placed) {
     return (
-      <p role="status" className="mt-6">
-        กำลังพาไปหน้าคำสั่งซื้อ…
-      </p>
+      <>
+        {liveRegions}
+        <div className="mt-6" role={placed.mismatch ? undefined : "status"}>
+          {placed.mismatch ? null : <p>กำลังพาไปหน้าคำสั่งซื้อ…</p>}
+          <Link
+            href={`/orders/${placed.token}`}
+            className="mt-3 inline-flex min-h-11 items-center rounded-full bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
+          >
+            ไปที่หน้าคำสั่งซื้อ
+          </Link>
+        </div>
+      </>
     );
   }
 
@@ -271,6 +345,7 @@ export function CheckoutForm() {
       id: name,
       name,
       value: fields[name],
+      readOnly: pending,
       onChange: (e: { target: { value: string } }) => setFields((f) => ({ ...f, [name]: e.target.value })),
       "aria-required": true as const,
       "aria-invalid": error ? (true as const) : undefined,

@@ -14,7 +14,7 @@ export type OrderChange = {
 };
 
 export type PlaceOrderData =
-  | { kind: "created"; token: string }
+  | { kind: "created"; token: string; contactMismatch: boolean }
   | { kind: "changed"; changes: OrderChange[]; currentTotalSatang: number };
 
 export type PlaceOrderDeps = {
@@ -100,8 +100,26 @@ export async function placeOrder(
     }
 
     const result = data as Record<string, unknown> | null;
-    if (result && (result.status === "created" || result.status === "existing")) {
-      return ok({ kind: "created", token });
+    if (result && result.status === "created") {
+      return ok({ kind: "created", token, contactMismatch: false });
+    }
+    if (result && result.status === "existing" && typeof result.order_id === "string") {
+      // A retry of an earlier request. Tell the browser whether the edited contact data differs
+      // from what was stored, without sending the stored values back.
+      const stored = await deps.client
+        .from("orders")
+        .select("customer_name, phone, shipping_address")
+        .eq("id", result.order_id)
+        .single();
+      if (stored.error || !stored.data) {
+        console.error("existing order lookup failed", stored.error?.code ?? "no row");
+        return fail("UNEXPECTED", UNEXPECTED_MESSAGE);
+      }
+      const contactMismatch =
+        stored.data.customer_name !== order.customerName ||
+        stored.data.phone !== order.phone ||
+        stored.data.shipping_address !== order.shippingAddress;
+      return ok({ kind: "created", token, contactMismatch });
     }
     if (
       result &&

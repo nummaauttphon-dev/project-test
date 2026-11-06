@@ -122,3 +122,109 @@ test("price change asks for reconfirmation before ordering", async ({ page }) =>
   expect(rows).toHaveLength(1);
   expect(rows[0].total_satang).toBe(17000);
 });
+
+/** Lets the first place-order request reach the server, then drops its response. */
+async function dropFirstOrderResponse(page: Page) {
+  let dropped = false;
+  await page.route("**/checkout", async (route) => {
+    const request = route.request();
+    if (!dropped && request.method() === "POST" && request.postData()?.includes("customerName")) {
+      dropped = true;
+      await route.fetch();
+      await route.abort("failed");
+      return;
+    }
+    await route.continue();
+  });
+}
+
+test("retry after an unknown outcome with edited address does not silently ship to the old one", async ({ page }) => {
+  const product = await seedProduct({ stock_quantity: 5 });
+  await seedCart(page, [{ productId: product.id, quantity: 1 }]);
+  await dropFirstOrderResponse(page);
+
+  await page.goto("/checkout");
+  await fillForm(page);
+  await page.getByRole("button", { name: "ยืนยันสั่งซื้อ" }).click();
+  await expect(page.getByTestId("checkout-alert")).toContainText("ไม่ทราบผลการสั่งซื้อ");
+  expect(await orders()).toHaveLength(1);
+
+  await page.getByLabel("ที่อยู่จัดส่ง").fill("999 ถนนใหม่ แขวงใหม่ เขตใหม่ เชียงใหม่ 50000");
+  await page.getByRole("button", { name: "ยืนยันสั่งซื้อ" }).click();
+
+  await expect(page.getByTestId("checkout-alert")).toContainText("สร้างคำสั่งซื้อไปแล้วด้วยข้อมูลที่ส่งครั้งแรก");
+  await expect(page.getByTestId("checkout-alert")).toContainText("ไม่ได้ใช้การแก้ไข");
+  await expect(page.getByRole("link", { name: "ไปที่หน้าคำสั่งซื้อ" })).toHaveAttribute("href", /^\/orders\/[A-Za-z0-9_-]{20,}$/);
+  await expect(page).toHaveURL(/\/checkout$/);
+  const { data } = await adminClient().from("orders").select("shipping_address");
+  expect(data).toHaveLength(1);
+  expect(data?.[0].shipping_address).toContain("คลองเตย");
+  const stored = await page.evaluate(() => JSON.stringify([window.localStorage, window.sessionStorage]));
+  expect(stored).not.toContain("999 ถนนใหม่");
+});
+
+test("reload after an unknown outcome and resubmit creates only one order", async ({ page }) => {
+  const product = await seedProduct({ stock_quantity: 5 });
+  await seedCart(page, [{ productId: product.id, quantity: 1 }]);
+  await dropFirstOrderResponse(page);
+
+  await page.goto("/checkout");
+  await fillForm(page);
+  await page.getByRole("button", { name: "ยืนยันสั่งซื้อ" }).click();
+  await expect(page.getByTestId("checkout-alert")).toContainText("ไม่ทราบผลการสั่งซื้อ");
+
+  await page.reload();
+  await expect(page.getByTestId("checkout-total")).toBeVisible();
+  await fillForm(page);
+  await page.getByRole("button", { name: "ยืนยันสั่งซื้อ" }).click();
+  await expect(page).toHaveURL(/\/orders\//);
+  expect(await orders()).toHaveLength(1);
+});
+
+test("a sold-out only cart says so and offers no confirm button", async ({ page }) => {
+  const product = await seedProduct({ name: "สมุดโน้ตเล่มสุดท้าย", stock_quantity: 3 });
+  await seedCart(page, [{ productId: product.id, quantity: 1 }]);
+
+  await page.goto("/checkout");
+  await fillForm(page);
+  await adminClient().from("products").update({ stock_quantity: 0 }).eq("id", product.id);
+  await page.getByRole("button", { name: "ยืนยันสั่งซื้อ" }).click();
+
+  await expect(page.getByTestId("checkout-status")).toContainText("สมุดโน้ตเล่มสุดท้าย");
+  await expect(page.getByTestId("checkout-status")).not.toContainText("ยอดรวม");
+  await expect(page.getByTestId("checkout-status")).not.toContainText("กดยืนยัน");
+  await expect(page.getByRole("button", { name: "ยืนยันสั่งซื้อ" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "ตะกร้าของคุณยังว่างอยู่" })).toBeVisible();
+  expect(await orders()).toHaveLength(0);
+});
+
+test("fields are read-only while the request is in flight", async ({ page }) => {
+  const product = await seedProduct();
+  await seedCart(page, [{ productId: product.id, quantity: 1 }]);
+  await page.route("**/checkout", async (route) => {
+    if (route.request().method() === "POST" && route.request().postData()?.includes("customerName")) {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+    await route.continue();
+  });
+
+  await page.goto("/checkout");
+  await fillForm(page);
+  await page.getByRole("button", { name: "กำลังสั่งซื้อ" }).or(page.getByRole("button", { name: "ยืนยันสั่งซื้อ" })).click();
+  await expect(page.getByLabel("ชื่อผู้รับ")).toHaveAttribute("readonly", "");
+  await expect(page.getByLabel("ที่อยู่จัดส่ง")).toHaveAttribute("readonly", "");
+  await expect(page).toHaveURL(/\/orders\//);
+});
+
+test("names what was removed or adjusted when the checkout page loads", async ({ page }) => {
+  const low = await seedProduct({ name: "ปากกาสต็อกน้อย", stock_quantity: 2 });
+  const gone = await seedProduct({ is_active: false });
+  await seedCart(page, [
+    { productId: low.id, quantity: 5 },
+    { productId: gone.id, quantity: 1 },
+  ]);
+  await page.goto("/checkout");
+  const status = page.getByTestId("checkout-status");
+  await expect(status).toContainText("ปรับจำนวน ปากกาสต็อกน้อย เหลือ 2 ชิ้น");
+  await expect(status).toContainText("นำสินค้า 1 รายการที่หมดหรือไม่มีจำหน่ายแล้วออกจากตะกร้า");
+});
