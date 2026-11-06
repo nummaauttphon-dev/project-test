@@ -1,26 +1,84 @@
 @import "tailwindcss";
 
+/*
+  Design tokens. The store has no brand yet: a calm paper-and-forest palette that is easy to
+  retune. Change the values here (and STORE_NAME in src/lib/store-config.ts) to rebrand.
+  Text/background pairs below meet WCAG 2.1 AA (4.5:1 body, 3:1 for UI borders and focus).
+*/
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #faf8f3;
+  --surface: #ffffff;
+  --sunken: #f0ece2;
+  --ink: #1c2220;
+  --ink-soft: #4f5753;
+  --line: #d9d3c4;
+  --line-strong: #8a8f89;
+  --brand: #1f5a49;
+  --brand-hover: #174638;
+  --on-brand: #ffffff;
+  --notice-bg: #fdf1dc;
+  --notice-line: #b7791f;
+  --notice-ink: #5c3a05;
+  --danger-bg: #fbe6e1;
+  --danger-ink: #8a2a16;
+  --radius: 0.75rem;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-on-brand: var(--on-brand);
+  --color-notice-bg: var(--notice-bg);
+  --color-notice-line: var(--notice-line);
+  --color-notice-ink: var(--notice-ink);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-ink: var(--danger-ink);
+  --font-sans: var(--font-thai), ui-sans-serif, system-ui, sans-serif;
+  --radius-card: var(--radius);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--paper);
+  color: var(--ink);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+}
+
+:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@keyframes pulse-soft {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.skeleton {
+  background: var(--sunken);
+  border-radius: var(--radius);
+  animation: pulse-soft 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+  }
+  * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
