@@ -126,6 +126,16 @@ alter table public.rate_limits enable row level security;
 revoke all on all tables in schema public from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 
+-- Objects created later in public are closed to anon/authenticated by default.
+alter default privileges for role postgres in schema public
+  revoke all on tables from anon, authenticated;
+alter default privileges for role postgres in schema public
+  revoke all on sequences from anon, authenticated;
+alter default privileges for role postgres in schema public
+  revoke all on functions from anon, authenticated;
+-- EXECUTE for PUBLIC is a global default, so it must be revoked without IN SCHEMA.
+alter default privileges for role postgres revoke execute on functions from public;
+
 grant select on public.products to anon, authenticated;
 create policy "Anyone can read active products" on public.products
   for select to anon, authenticated using (is_active);
