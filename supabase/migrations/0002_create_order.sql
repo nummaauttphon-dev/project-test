@@ -2,6 +2,22 @@
 -- in one transaction. Relies on READ COMMITTED and VOLATILE, so each statement sees a fresh
 -- snapshot; the re-checks below depend on that.
 
+-- The `existing` response for a key, or null when no order has it. Stays VOLATILE so that each
+-- call sees orders committed while create_order was waiting.
+create function public.create_order_existing_result(p_idempotency_key text) returns jsonb
+language sql
+set search_path = ''
+as $$
+  select jsonb_build_object('status', 'existing', 'order_id', o.id, 'order_number', o.order_number)
+  from public.orders as o
+  where o.idempotency_key = p_idempotency_key;
+$$;
+
+revoke execute on function public.create_order_existing_result(text)
+  from public, anon, authenticated;
+grant execute on function public.create_order_existing_result(text)
+  to service_role;
+
 create function public.create_order(
   p_idempotency_key text,
   p_token_hash text,
@@ -18,6 +34,7 @@ declare
   v_product_ids uuid[];
   v_quantities integer[];
   v_line record;
+  v_existing jsonb;
   v_order_id uuid;
   v_order_number text;
   v_shipping_fee bigint;
@@ -62,11 +79,9 @@ begin
       using errcode = 'invalid_parameter_value';
   end if;
 
-  select o.id, o.order_number into v_order_id, v_order_number
-  from public.orders as o
-  where o.idempotency_key = p_idempotency_key;
-  if found then
-    return jsonb_build_object('status', 'existing', 'order_id', v_order_id, 'order_number', v_order_number);
+  v_existing := public.create_order_existing_result(p_idempotency_key);
+  if v_existing is not null then
+    return v_existing;
   end if;
 
   -- Lock in id order so that carts listing the same products cannot deadlock.
@@ -78,11 +93,9 @@ begin
 
   -- A same-key request may have held these locks while we waited. Without this re-check we would
   -- see the stock it took and report a stock problem instead of its order.
-  select o.id, o.order_number into v_order_id, v_order_number
-  from public.orders as o
-  where o.idempotency_key = p_idempotency_key;
-  if found then
-    return jsonb_build_object('status', 'existing', 'order_id', v_order_id, 'order_number', v_order_number);
+  v_existing := public.create_order_existing_result(p_idempotency_key);
+  if v_existing is not null then
+    return v_existing;
   end if;
 
   select s.shipping_fee_satang, s.payment_window_minutes
@@ -164,13 +177,12 @@ begin
     where p.id = m.product_id;
   exception
     when unique_violation then
-      -- A same-key request on other products can get past both lookups. Any other unique
-      -- violation (token_hash) is not an idempotent retry, so it propagates.
-      select o.id, o.order_number into v_order_id, v_order_number
-      from public.orders as o
-      where o.idempotency_key = p_idempotency_key;
-      if found then
-        return jsonb_build_object('status', 'existing', 'order_id', v_order_id, 'order_number', v_order_number);
+      -- A same-key request on other products can get past both lookups. A retry carries the same
+      -- token_hash, so either unique index may report it; the key lookup decides. A violation
+      -- with no order for this key is not an idempotent retry, so it propagates.
+      v_existing := public.create_order_existing_result(p_idempotency_key);
+      if v_existing is not null then
+        return v_existing;
       end if;
       raise;
   end;

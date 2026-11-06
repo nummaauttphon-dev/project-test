@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -11,7 +11,10 @@ import {
 } from "../helpers/supabase";
 
 const SHIPPING = 5000;
-const SIGNATURE = "public.create_order(text,text,text,text,text,jsonb,bigint)";
+const SIGNATURES = [
+  "public.create_order(text,text,text,text,text,jsonb,bigint)",
+  "public.create_order_existing_result(text)",
+];
 
 type Line = { product_id: string; quantity: number };
 type Change = {
@@ -26,10 +29,15 @@ type PlaceResult =
   | ({ status: "existing" } & Placed)
   | { status: "changed"; changes: Change[]; current_total_satang: number };
 
+/** In production the token is HMAC-derived from the key, so repeats of a key share a token_hash. */
+function tokenHashFor(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
+
 function args(items: unknown, expected: number | null, key: string = randomUUID()) {
   return {
     p_idempotency_key: key,
-    p_token_hash: randomBytes(32).toString("hex"),
+    p_token_hash: tokenHashFor(key),
     p_customer_name: "ลูกค้าทดสอบ",
     p_phone: "0812345678",
     p_shipping_address: "123 ถนนทดสอบ แขวงทดสอบ เขตทดสอบ กรุงเทพฯ 10100",
@@ -105,7 +113,7 @@ async function insertOrderInTx(client: pg.Client, key: string): Promise<string> 
         total_satang, token_hash, idempotency_key, expires_at)
      values ('x', '0812345678', 'ที่อยู่ทดสอบ', 10000, 5000, 15000, $1, $2, now() + interval '1 day')
      returning id`,
-    [randomBytes(32).toString("hex"), key],
+    [tokenHashFor(key), key],
   );
   return rows[0].id;
 }
@@ -611,6 +619,35 @@ describe("create_order", () => {
       expect(await stockOf(b.id)).toBe(50 - pairs * 2);
     });
 
+    it("prices from the row it locked, not from a stale read", async () => {
+      const product = await seedProduct({ price_satang: 1000, stock_quantity: 5 });
+      const holder = await tracked();
+      const observer = await tracked();
+
+      await holder.query("begin");
+      await holder.query("select 1 from public.products where id = $1 for update", [product.id]);
+      await holder.query("update public.products set price_satang = 2000 where id = $1", [product.id]);
+
+      // The expectation matches the old price, which is still the committed one at this point.
+      const pending = place([{ product_id: product.id, quantity: 1 }], 1000 + SHIPPING);
+      await waitUntilBlocked(observer, pending);
+      await holder.query("commit");
+
+      const result = await pending;
+      expectStatus(result, "changed");
+      expect(result.changes).toEqual([
+        {
+          product_id: product.id,
+          reason: "price_changed",
+          available_quantity: 5,
+          current_price_satang: 2000,
+        },
+      ]);
+      expect(result.current_total_satang).toBe(2000 + SHIPPING);
+      expect(await orderCount()).toBe(0);
+      expect(await stockOf(product.id)).toBe(5);
+    });
+
     it("takes product locks in id order whatever the input order", async () => {
       const first = await seedProduct();
       const second = await seedProduct();
@@ -654,9 +691,17 @@ describe("create_order", () => {
       expect(error?.code).toBe("42501");
       expect(await orderCount()).toBe(0);
       expect(await stockOf(product.id)).toBe(product.stock_quantity);
+
+      const key = randomUUID();
+      expectStatus(await placeRpc(product, key), "created");
+      const helper = await anonClient().rpc("create_order_existing_result", {
+        p_idempotency_key: key,
+      });
+      expect(helper.error?.code).toBe("42501");
+      expect(helper.data).toBeNull();
     });
 
-    it("grants EXECUTE to service_role only and pins search_path", async () => {
+    it.each(SIGNATURES)("grants EXECUTE to service_role only and pins search_path: %s", async (signature) => {
       const client = await tracked();
       const { rows } = await client.query<Record<string, unknown>>(
         `select
@@ -666,7 +711,7 @@ describe("create_order", () => {
            has_function_privilege('service_role', $1::regprocedure, 'execute') as service_exec,
            (select p.proconfig from pg_proc p where p.oid = $1::regprocedure) as config,
            (select p.prosecdef from pg_proc p where p.oid = $1::regprocedure) as definer`,
-        [SIGNATURE],
+        [signature],
       );
       expect(rows[0]).toEqual({
         public_exec: false,
