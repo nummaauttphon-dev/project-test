@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useId, useState } from "react";
-import { MAX_LINE_QUANTITY } from "@/features/cart/cart-storage";
+import { addToLines, MAX_CART_LINES, MAX_LINE_QUANTITY } from "@/features/cart/cart-storage";
 import { useCart } from "@/features/cart/use-cart";
 
 export function AddToCart({ productId, stock }: { productId: string; stock: number }) {
   const { lines, ready, setLines } = useCart();
   const [quantity, setQuantity] = useState(1);
   const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
   const selectId = useId();
 
   if (stock <= 0) {
@@ -30,17 +31,25 @@ export function AddToCart({ productId, stock }: { productId: string; stock: numb
   const inCart = lines.find((line) => line.productId === productId)?.quantity ?? 0;
 
   function add() {
-    const next = Math.min(inCart + quantity, limit);
-    if (next === inCart) {
+    setMessage("");
+    setError("");
+    const result = addToLines(lines, productId, quantity, limit);
+    if (result.status === "cart_full") {
+      setError(`ตะกร้าเต็มแล้ว ใส่สินค้าได้สูงสุด ${MAX_CART_LINES} รายการ กรุณาลบบางรายการก่อน`);
+      return;
+    }
+    if (result.status === "at_limit") {
       setMessage(`ในตะกร้ามีสินค้านี้ครบ ${limit} ชิ้นแล้ว ซึ่งเป็นจำนวนสูงสุดที่สั่งได้`);
       return;
     }
-    const others = lines.filter((line) => line.productId !== productId);
-    setLines([...others, { productId, quantity: next }]);
+    if (!setLines(result.lines)) {
+      setError("บันทึกตะกร้าไม่สำเร็จ เบราว์เซอร์อาจปิดการเก็บข้อมูลไว้ กรุณาเปิดใช้งานแล้วลองใหม่");
+      return;
+    }
     setMessage(
-      next < inCart + quantity
-        ? `เพิ่มลงตะกร้าแล้ว รวม ${next} ชิ้น (สั่งได้สูงสุด ${limit} ชิ้น)`
-        : `เพิ่มลงตะกร้าแล้ว รวม ${next} ชิ้น`,
+      result.quantity < inCart + quantity
+        ? `เพิ่มลงตะกร้าแล้ว รวม ${result.quantity} ชิ้น (สั่งได้สูงสุด ${limit} ชิ้น)`
+        : `เพิ่มลงตะกร้าแล้ว รวม ${result.quantity} ชิ้น`,
     );
   }
 
@@ -75,9 +84,14 @@ export function AddToCart({ productId, stock }: { productId: string; stock: numb
       >
         เพิ่มลงตะกร้า
       </button>
-      <div role="status" className="mt-3">
+      <div role="alert">
+        {error ? (
+          <p className="mt-3 rounded-lg border border-danger-ink bg-danger-bg p-3 text-danger-ink">{error}</p>
+        ) : null}
+      </div>
+      <div role="status">
         {message ? (
-          <p className="rounded-lg border border-line bg-surface p-3">
+          <p className="mt-3 rounded-lg border border-line bg-surface p-3">
             {message}{" "}
             <Link href="/cart" className="font-semibold text-brand underline">
               ดูตะกร้า

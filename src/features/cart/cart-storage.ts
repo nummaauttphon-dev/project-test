@@ -1,15 +1,20 @@
+import { z } from "zod";
+
 export type CartLine = { productId: string; quantity: number };
 
 export const CART_STORAGE_KEY = "cart.v1";
 export const MAX_CART_LINES = 50;
 export const MAX_LINE_QUANTITY = 10;
 
+// Same id rule as getCartViewAction, so a stored line the server would reject is dropped here.
+const uuid = z.uuid();
+
 function isValidLine(value: unknown): value is CartLine {
   if (typeof value !== "object" || value === null) return false;
   const { productId, quantity } = value as Record<string, unknown>;
   return (
     typeof productId === "string" &&
-    productId.length > 0 &&
+    uuid.safeParse(productId).success &&
     typeof quantity === "number" &&
     Number.isInteger(quantity) &&
     quantity >= 1
@@ -39,13 +44,34 @@ export function readCart(storage: Pick<Storage, "getItem">): CartLine[] {
     .map(([productId, quantity]) => ({ productId, quantity }));
 }
 
-/** Writes the cart. A full or blocked storage is ignored: the cart then lives for this page only. */
-export function writeCart(storage: Pick<Storage, "setItem">, lines: CartLine[]): void {
+/** Writes the cart. Returns false when storage is full or blocked, so callers can tell the customer. */
+export function writeCart(storage: Pick<Storage, "setItem">, lines: CartLine[]): boolean {
   try {
     storage.setItem(CART_STORAGE_KEY, JSON.stringify(lines));
+    return true;
   } catch {
-    // Storage may be full or blocked (private mode); nothing useful to do.
+    return false;
   }
+}
+
+export type AddResult =
+  | { status: "added"; lines: CartLine[]; quantity: number }
+  | { status: "at_limit" }
+  | { status: "cart_full" };
+
+/** Adds `quantity` of a product, capped at `limit` per line. Refuses a new line beyond 50 lines. */
+export function addToLines(
+  lines: CartLine[],
+  productId: string,
+  quantity: number,
+  limit: number,
+): AddResult {
+  const inCart = lines.find((line) => line.productId === productId)?.quantity ?? 0;
+  if (inCart === 0 && lines.length >= MAX_CART_LINES) return { status: "cart_full" };
+  const next = Math.min(inCart + quantity, limit);
+  if (next <= inCart) return { status: "at_limit" };
+  const others = lines.filter((line) => line.productId !== productId);
+  return { status: "added", lines: [...others, { productId, quantity: next }], quantity: next };
 }
 
 export type ReconcileResult = {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readCart, reconcileCart, writeCart } from "@/features/cart/cart-storage";
+import { addToLines, readCart, reconcileCart, writeCart } from "@/features/cart/cart-storage";
 
 const hiddenId = "11111111-1111-4111-8111-111111111111";
 const lowStockId = "22222222-2222-4222-8222-222222222222";
@@ -15,6 +15,16 @@ describe("readCart", () => {
     expect(readCart(storageWith("{broken"))).toEqual([]);
     expect(readCart(storageWith('{"a":1}'))).toEqual([]);
     expect(readCart(storageWith(JSON.stringify([{ productId: "x", quantity: -1 }])))).toEqual([]);
+  });
+
+  it("drops well-formed lines whose product id is not a UUID", () => {
+    const raw = JSON.stringify([
+      { productId: "x", quantity: 1 },
+      { productId: "not-a-uuid-at-all", quantity: 2 },
+      { productId: otherId, quantity: 1 },
+    ]);
+    expect(readCart(storageWith(raw))).toEqual([{ productId: otherId, quantity: 1 }]);
+    expect(readCart(storageWith(JSON.stringify([{ productId: "x", quantity: 1 }])))).toEqual([]);
   });
 
   it("returns an empty cart when storage itself throws", () => {
@@ -55,21 +65,17 @@ describe("writeCart", () => {
       getItem: (k: string) => store.get(k) ?? null,
       setItem: (k: string, v: string) => void store.set(k, v),
     };
-    writeCart(storage, [{ productId: otherId, quantity: 3 }]);
+    expect(writeCart(storage, [{ productId: otherId, quantity: 3 }])).toBe(true);
     expect(readCart(storage)).toEqual([{ productId: otherId, quantity: 3 }]);
   });
 
-  it("does not throw when storage is full or blocked", () => {
-    expect(() =>
-      writeCart(
-        {
-          setItem: () => {
-            throw new Error("quota");
-          },
-        },
-        [{ productId: otherId, quantity: 1 }],
-      ),
-    ).not.toThrow();
+  it("returns false instead of throwing when storage is full or blocked", () => {
+    const blocked = {
+      setItem: () => {
+        throw new Error("quota");
+      },
+    };
+    expect(writeCart(blocked, [{ productId: otherId, quantity: 1 }])).toBe(false);
   });
 });
 
@@ -101,5 +107,30 @@ describe("reconcileCart", () => {
     expect(result.removed).toEqual([hiddenId]);
     expect(result.adjusted).toEqual([]);
     expect(result.lines).toEqual([{ productId: otherId, quantity: 3 }]);
+  });
+});
+
+describe("addToLines", () => {
+  const manyLines = Array.from({ length: 50 }, (_, i) => ({
+    productId: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    quantity: 1,
+  }));
+
+  it("adds a new line and merges into an existing one up to the limit", () => {
+    const first = addToLines([], otherId, 2, 5);
+    expect(first).toEqual({ status: "added", lines: [{ productId: otherId, quantity: 2 }], quantity: 2 });
+    if (first.status !== "added") throw new Error("expected added");
+    const second = addToLines(first.lines, otherId, 9, 5);
+    expect(second).toEqual({ status: "added", lines: [{ productId: otherId, quantity: 5 }], quantity: 5 });
+  });
+
+  it("reports at_limit when the line is already full", () => {
+    expect(addToLines([{ productId: otherId, quantity: 5 }], otherId, 1, 5)).toEqual({ status: "at_limit" });
+  });
+
+  it("refuses a 51st distinct product but still allows more of an existing one", () => {
+    expect(addToLines(manyLines, otherId, 1, 10)).toEqual({ status: "cart_full" });
+    const result = addToLines(manyLines, manyLines[0].productId, 1, 10);
+    expect(result.status).toBe("added");
   });
 });

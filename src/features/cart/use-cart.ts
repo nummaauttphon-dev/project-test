@@ -31,13 +31,16 @@ export function useCart() {
     [raw],
   );
 
-  const setLines = useCallback((next: CartLine[]) => {
+  /** Returns false when the browser would not store the cart; the UI must then say so. */
+  const setLines = useCallback((next: CartLine[]): boolean => {
+    let saved: boolean;
     try {
-      writeCart(window.localStorage, next);
+      saved = writeCart(window.localStorage, next);
     } catch {
-      // localStorage can be blocked entirely; the cart then stays empty.
+      saved = false; // accessing localStorage itself can throw
     }
-    window.dispatchEvent(new Event(CART_EVENT));
+    if (saved) window.dispatchEvent(new Event(CART_EVENT));
+    return saved;
   }, []);
 
   return { lines, ready, setLines };

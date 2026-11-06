@@ -155,3 +155,59 @@ test("loads a product image from Supabase storage and falls back when it is miss
     await adminClient().storage.from("product-images").remove([path]);
   }
 });
+
+test("drops stored lines with a non-UUID product id instead of breaking the cart", async ({ page }) => {
+  await seedCart(page, [{ productId: "x", quantity: 1 }]);
+  await page.goto("/cart");
+  await expect(page.getByRole("heading", { name: "ตะกร้าของคุณยังว่างอยู่" })).toBeVisible();
+  await expect(page.getByText("ข้อมูลตะกร้าไม่ถูกต้อง")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /^ตะกร้า$/ })).toBeVisible(); // no count badge
+});
+
+test("cart status live region stays mounted while notices appear", async ({ page }) => {
+  const low = await seedProduct({ name: "ปากกาสต็อกน้อย", stock_quantity: 2 });
+  await seedCart(page, [{ productId: low.id, quantity: 5 }]);
+  // Hold the server action so the page is observed before and after the notice appears.
+  await page.route("**/cart", async (route) => {
+    if (route.request().method() === "POST") await new Promise((resolve) => setTimeout(resolve, 1000));
+    await route.continue();
+  });
+
+  await page.goto("/cart");
+  const status = page.getByTestId("cart-status");
+  await expect(status).toBeAttached();
+  await expect(status).toHaveText("");
+  await status.evaluate((el) => el.setAttribute("data-mark", "same"));
+
+  await expect(status).toContainText("ปรับจำนวน ปากกาสต็อกน้อย เหลือ 2 ชิ้น");
+  await expect(status).toHaveAttribute("data-mark", "same");
+  await expect(page.getByRole("status")).toHaveCount(1);
+});
+
+test("tells the customer when the cart cannot be saved", async ({ page }) => {
+  const product = await seedProduct({ name: "สินค้าบันทึกไม่ได้" });
+  await page.addInitScript(() => {
+    Storage.prototype.setItem = () => {
+      throw new DOMException("blocked", "QuotaExceededError");
+    };
+  });
+  await page.goto(`/products/${product.slug}`);
+  await page.getByRole("button", { name: "เพิ่มลงตะกร้า" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "บันทึกตะกร้าไม่สำเร็จ" })).toBeVisible();
+  await expect(page.getByText("เพิ่มลงตะกร้าแล้ว")).toHaveCount(0);
+});
+
+test("refuses a 51st distinct product with an error", async ({ page }) => {
+  const product = await seedProduct({ name: "สินค้ารายการที่ 51" });
+  await seedCart(
+    page,
+    Array.from({ length: 50 }, (_, i) => ({
+      productId: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+      quantity: 1,
+    })),
+  );
+  await page.goto(`/products/${product.slug}`);
+  await page.getByRole("button", { name: "เพิ่มลงตะกร้า" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "ตะกร้าเต็มแล้ว" })).toBeVisible();
+  await expect(page.getByText("เพิ่มลงตะกร้าแล้ว")).toHaveCount(0);
+});

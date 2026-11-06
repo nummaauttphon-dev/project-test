@@ -13,12 +13,15 @@ type Load =
   | { state: "error"; message: string }
   | { state: "done"; data: CartData };
 
+const SAVE_ERROR = "บันทึกตะกร้าไม่สำเร็จ เบราว์เซอร์อาจปิดการเก็บข้อมูลไว้ การเปลี่ยนแปลงนี้จะไม่ถูกจดจำ";
+
 export function CartView() {
   const { lines, ready, setLines } = useCart();
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [notices, setNotices] = useState<string[]>([]);
   const [action, setAction] = useState("");
+  const [saveError, setSaveError] = useState("");
   const linesRef = useRef<CartLine[]>(lines);
   useEffect(() => {
     linesRef.current = lines;
@@ -51,7 +54,7 @@ export function CartView() {
           next.push(`ปรับจำนวน ${names.get(id) ?? "สินค้า"} เหลือ ${quantity} ชิ้น ตามสต็อกที่มีอยู่`);
         }
         setNotices(next);
-        if (removed.length > 0 || adjusted.length > 0) setLines(kept);
+        if ((removed.length > 0 || adjusted.length > 0) && !setLines(kept)) setSaveError(SAVE_ERROR);
         setLoad({ state: "done", data: result.data });
       })
       .catch(() => {
@@ -65,7 +68,10 @@ export function CartView() {
 
   const changeQuantity = useCallback(
     (productId: string, quantity: number) => {
-      setLines(linesRef.current.map((l) => (l.productId === productId ? { ...l, quantity } : l)));
+      const saved = setLines(
+        linesRef.current.map((l) => (l.productId === productId ? { ...l, quantity } : l)),
+      );
+      setSaveError(saved ? "" : SAVE_ERROR);
       setAction("");
     },
     [setLines],
@@ -73,26 +79,44 @@ export function CartView() {
 
   const remove = useCallback(
     (productId: string, name: string) => {
-      setLines(linesRef.current.filter((l) => l.productId !== productId));
-      setAction(`นำ ${name} ออกจากตะกร้าแล้ว`);
+      const saved = setLines(linesRef.current.filter((l) => l.productId !== productId));
+      setSaveError(saved ? "" : SAVE_ERROR);
+      setAction(saved ? `นำ ${name} ออกจากตะกร้าแล้ว` : "");
     },
     [setLines],
   );
 
   const messages = [...notices, ...(action ? [action] : [])];
-  const statusRegion = (
-    <div role="status" className="mt-4 empty:hidden">
-      {messages.map((text) => (
-        <p key={text} className="mb-2 rounded-lg border border-notice-line bg-notice-bg p-3 text-notice-ink">
-          {text}
-        </p>
-      ))}
-    </div>
+  // One live region stays mounted for the whole life of the page, so screen readers register it
+  // before any text is added to it. Never move it inside a branch below.
+  const liveRegions = (
+    <>
+      <div role="alert" data-testid="cart-alert">
+        {saveError ? (
+          <p className="mt-4 rounded-lg border border-danger-ink bg-danger-bg p-3 text-danger-ink">{saveError}</p>
+        ) : null}
+      </div>
+      <div role="status" data-testid="cart-status">
+        {messages.map((text) => (
+          <p key={text} className="mt-4 rounded-lg border border-notice-line bg-notice-bg p-3 text-notice-ink">
+            {text}
+          </p>
+        ))}
+      </div>
+    </>
   );
 
+  return (
+    <>
+      {liveRegions}
+      {renderBody()}
+    </>
+  );
+
+  function renderBody() {
   if (!ready || load.state === "loading") {
     return (
-      <div role="status" aria-busy="true" className="mt-6">
+      <div aria-busy="true" className="mt-6">
         <span className="sr-only">กำลังโหลดตะกร้า</span>
         <div aria-hidden="true" className="space-y-3">
           <div className="skeleton h-28" />
@@ -126,7 +150,6 @@ export function CartView() {
   if (rows.length === 0) {
     return (
       <>
-        {statusRegion}
         <section className="mt-6 rounded-card border border-dashed border-line-strong bg-surface p-8 text-center">
           <h2 className="text-lg font-semibold">ตะกร้าของคุณยังว่างอยู่</h2>
           <p className="mt-2 text-ink-soft">เลือกสินค้าที่ถูกใจ แล้วเพิ่มลงตะกร้าได้เลย</p>
@@ -146,7 +169,6 @@ export function CartView() {
 
   return (
     <>
-      {statusRegion}
       <ul className="mt-4 space-y-3">
         {rows.map(({ line, product }) => {
           const max = Math.min(product.stock_quantity, MAX_LINE_QUANTITY);
@@ -216,4 +238,5 @@ export function CartView() {
       </section>
     </>
   );
+  }
 }
