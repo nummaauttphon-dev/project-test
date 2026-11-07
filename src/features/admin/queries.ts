@@ -17,8 +17,6 @@ const LOW_STOCK_LIMIT = 50;
 /** Signed slip links live this long: enough to look at the slip, short if a link leaks. */
 export const SLIP_URL_SECONDS = 300;
 const SLIP_BUCKET = "payment-slips";
-/** PostgREST answers at most this many rows per request (max_rows in supabase/config.toml). */
-const API_PAGE = 1000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -90,37 +88,15 @@ function failure(where: string, error: { code?: string } | null): Error {
   return new Error(`${where}: ${error?.code ?? "unknown"}`);
 }
 
-async function countOrders(client: SupabaseClient, statuses: OrderStatus[]): Promise<number> {
-  const { count, error } = await client
-    .from("orders")
-    .select("id", { count: "exact", head: true })
-    .in("status", statuses);
-  if (error) throw failure("countOrders", error);
-  return count ?? 0;
-}
+type StatsRow = { pending_review?: unknown; paid_orders?: unknown; revenue_satang?: unknown };
 
-/** Sums total_satang page by page: the API caps each answer at API_PAGE rows. */
-async function sumRevenue(client: SupabaseClient): Promise<number> {
-  let sum = 0;
-  for (let from = 0; ; from += API_PAGE) {
-    const { data, error } = await client
-      .from("orders")
-      .select("total_satang")
-      .in("status", ["paid", "shipped"])
-      .order("id")
-      .range(from, from + API_PAGE - 1);
-    if (error) throw failure("sumRevenue", error);
-    for (const row of data ?? []) sum += Number(row.total_satang);
-    if ((data ?? []).length < API_PAGE) return sum;
-  }
-}
-
-/** Paid orders and revenue count paid and shipped only (spec, section 5). */
+/**
+ * The counts and revenue come from admin_dashboard_stats, one statement and so one snapshot. Paid
+ * orders and revenue count paid and shipped only (spec, section 5).
+ */
 export async function getDashboardStats(client: SupabaseClient): Promise<DashboardStats> {
-  const [pendingReview, paidOrders, revenueSatang, lowStock] = await Promise.all([
-    countOrders(client, ["payment_review"]),
-    countOrders(client, ["paid", "shipped"]),
-    sumRevenue(client),
+  const [stats, lowStock] = await Promise.all([
+    client.rpc("admin_dashboard_stats"),
     client
       .from("products")
       .select("id, name, stock_quantity")
@@ -130,15 +106,17 @@ export async function getDashboardStats(client: SupabaseClient): Promise<Dashboa
       .order("name")
       .limit(LOW_STOCK_LIMIT),
   ]);
+  if (stats.error) throw failure("admin_dashboard_stats", stats.error);
   if (lowStock.error) throw failure("lowStock", lowStock.error);
+  const row = (stats.data ?? {}) as StatsRow;
   return {
-    pendingReview,
-    paidOrders,
-    revenueSatang,
-    lowStock: (lowStock.data ?? []).map((row) => ({
-      id: String(row.id),
-      name: String(row.name),
-      stockQuantity: Number(row.stock_quantity),
+    pendingReview: Number(row.pending_review ?? 0),
+    paidOrders: Number(row.paid_orders ?? 0),
+    revenueSatang: Number(row.revenue_satang ?? 0),
+    lowStock: (lowStock.data ?? []).map((product) => ({
+      id: String(product.id),
+      name: String(product.name),
+      stockQuantity: Number(product.stock_quantity),
     })),
   };
 }

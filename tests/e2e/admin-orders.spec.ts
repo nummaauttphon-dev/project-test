@@ -11,10 +11,13 @@ const png = readFileSync(path.join(__dirname, "..", "fixtures", "real.png"));
 let admin: TestUser;
 
 test.beforeAll(async () => {
+  await resetData();
   await deleteTestUsers();
 });
 
 test.afterAll(async () => {
+  // Reviewed slips reference the admin (ON DELETE RESTRICT), so they go first.
+  await resetData();
   await deleteTestUsers();
 });
 
@@ -218,4 +221,28 @@ test("orders list shows payment review first and filters by status", async ({ pa
 
   await rows.nth(0).getByRole("link").click();
   await expect(page).toHaveURL(new RegExp(`/admin/orders/${paid.id}$`));
+});
+
+test("cancelling from a page that no longer shows the real status changes nothing", async ({ page }) => {
+  const { order } = await seedReview();
+  await page.goto(`/admin/orders/${order.id}`);
+  await expect(statusOf(page)).toHaveText("รอตรวจสลิป");
+
+  // Approved elsewhere after this page rendered: its softer warning no longer fits.
+  const { data, error } = await adminClient().rpc("transition_order", {
+    p_order_id: order.id,
+    p_to: "paid",
+    p_actor: admin.id,
+  });
+  expect(error).toBeNull();
+  expect(data).toEqual({ ok: true, status: "paid" });
+
+  await page.getByRole("button", { name: "ยกเลิกคำสั่งซื้อ" }).click();
+  const dialog = page.getByRole("dialog", { name: "ยืนยันการยกเลิกคำสั่งซื้อ" });
+  await dialog.getByRole("button", { name: "ยืนยันการยกเลิก" }).click();
+  await expect(dialog.getByTestId("action-error")).toContainText("กรุณาโหลดหน้าใหม่");
+  expect((await orderRow(order.id)).status).toBe("paid");
+
+  await page.reload();
+  await expect(statusOf(page)).toHaveText("ชำระแล้ว");
 });

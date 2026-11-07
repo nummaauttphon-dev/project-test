@@ -50,7 +50,7 @@ const BLANKS: [string, string | null][] = [
 
 const SIGNATURES = [
   "public.submit_payment_slip(uuid,text)",
-  "public.transition_order(uuid,public.order_status,uuid,text,text)",
+  "public.transition_order(uuid,public.order_status,uuid,text,text,public.order_status)",
   "public.set_tracking_number(uuid,text)",
   "public.expire_orders()",
   "public.restock_orders(uuid[])",

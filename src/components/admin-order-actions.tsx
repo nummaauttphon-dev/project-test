@@ -9,6 +9,7 @@ import {
   setTrackingAction,
   shipOrderAction,
 } from "@/features/admin/order-actions";
+import type { OrderStatus } from "@/features/orders/queries";
 import type { ActionResult } from "@/lib/result";
 
 const GENERIC_ERROR = "ทำรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
@@ -80,11 +81,17 @@ function FieldError({ id, testId, message }: { id: string; testId: string; messa
   ) : null;
 }
 
-export function ApproveSlipButton({ orderId }: { orderId: string }) {
+/**
+ * Every component takes `status`, the order's status as this page showed it. Actions send it along,
+ * and the database refuses if the order has changed since the admin looked.
+ */
+type Shown = { orderId: string; status: OrderStatus };
+
+export function ApproveSlipButton({ orderId, status }: Shown) {
   const { pending, failure, run } = useAdminAction();
   return (
     <div className="space-y-3">
-      <button type="button" disabled={pending} className={`${PRIMARY} w-full`} onClick={() => run(() => approveSlipAction(orderId))}>
+      <button type="button" disabled={pending} className={`${PRIMARY} w-full`} onClick={() => run(() => approveSlipAction(orderId, status))}>
         {pending ? "กำลังบันทึก…" : "ยืนยันการชำระเงิน"}
       </button>
       <ActionError failure={failure} />
@@ -92,7 +99,7 @@ export function ApproveSlipButton({ orderId }: { orderId: string }) {
   );
 }
 
-export function RejectSlipForm({ orderId }: { orderId: string }) {
+export function RejectSlipForm({ orderId, status }: Shown) {
   const { pending, failure, run } = useAdminAction();
   const [reason, setReason] = useState("");
   const id = useId();
@@ -100,7 +107,7 @@ export function RejectSlipForm({ orderId }: { orderId: string }) {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    run(() => rejectSlipAction(orderId, reason), () => setReason(""));
+    run(() => rejectSlipAction(orderId, reason, status), () => setReason(""));
   }
 
   return (
@@ -132,7 +139,7 @@ export function RejectSlipForm({ orderId }: { orderId: string }) {
 }
 
 /** Ships a paid order, or with `correct` fixes the tracking number of a shipped one. */
-export function TrackingForm({ orderId, correct = false }: { orderId: string; correct?: boolean }) {
+export function TrackingForm({ orderId, status, correct = false }: Shown & { correct?: boolean }) {
   const { pending, failure, run } = useAdminAction();
   const [tracking, setTracking] = useState("");
   const id = useId();
@@ -140,8 +147,11 @@ export function TrackingForm({ orderId, correct = false }: { orderId: string; co
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const action = correct ? setTrackingAction : shipOrderAction;
-    run(() => action(orderId, tracking), () => setTracking(""));
+    // A correction changes no status, so set_tracking_number needs no expected status.
+    run(
+      () => (correct ? setTrackingAction(orderId, tracking) : shipOrderAction(orderId, tracking, status)),
+      () => setTracking(""),
+    );
   }
 
   return (
@@ -175,16 +185,9 @@ export function TrackingForm({ orderId, correct = false }: { orderId: string; co
  * Cancelling always asks first: it returns the stock and cannot be undone. For money the store may
  * already hold, the question says plainly that the refund is the admin's to make.
  */
-export function CancelOrderButton({
-  orderId,
-  refund,
-  totalText,
-}: {
-  orderId: string;
-  /** "paid": money received; "maybe": a slip is waiting, so money may have been sent. */
-  refund: "paid" | "maybe" | "none";
-  totalText: string;
-}) {
+export function CancelOrderButton({ orderId, status, totalText }: Shown & { totalText: string }) {
+  // "paid": money received; "maybe": a slip is waiting, so money may have been sent.
+  const refund = status === "paid" ? "paid" : status === "payment_review" ? "maybe" : "none";
   const { pending, failure, run } = useAdminAction();
   const dialog = useRef<HTMLDialogElement>(null);
   const id = useId();
@@ -226,7 +229,7 @@ export function CancelOrderButton({
             type="button"
             disabled={pending}
             className={DANGER}
-            onClick={() => run(() => cancelOrderAction(orderId), () => dialog.current?.close())}
+            onClick={() => run(() => cancelOrderAction(orderId, status), () => dialog.current?.close())}
           >
             {pending ? "กำลังยกเลิก…" : "ยืนยันการยกเลิก"}
           </button>

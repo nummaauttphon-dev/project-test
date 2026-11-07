@@ -35,10 +35,10 @@ const ORDER_ID = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
  * guard. Task 12 adds its product and settings actions here.
  */
 const allAdminActions: [name: string, call: () => Promise<unknown>][] = [
-  ["approveSlipAction", () => approveSlipAction(ORDER_ID)],
-  ["rejectSlipAction", () => rejectSlipAction(ORDER_ID, "ยอดเงินไม่ตรงกับคำสั่งซื้อ")],
-  ["shipOrderAction", () => shipOrderAction(ORDER_ID, "TH1234567890")],
-  ["cancelOrderAction", () => cancelOrderAction(ORDER_ID)],
+  ["approveSlipAction", () => approveSlipAction(ORDER_ID, "payment_review")],
+  ["rejectSlipAction", () => rejectSlipAction(ORDER_ID, "ยอดเงินไม่ตรงกับคำสั่งซื้อ", "payment_review")],
+  ["shipOrderAction", () => shipOrderAction(ORDER_ID, "TH1234567890", "paid")],
+  ["cancelOrderAction", () => cancelOrderAction(ORDER_ID, "paid")],
   ["setTrackingAction", () => setTrackingAction(ORDER_ID, "TH0987654321")],
 ];
 
@@ -88,7 +88,7 @@ describe("admin action guards", () => {
       string,
       (...args: unknown[]) => Promise<unknown>
     >;
-    expect(await actions[name](null, { toString: () => "x" })).toMatchObject({ code: "UNAUTHORIZED" });
+    expect(await actions[name](null, { toString: () => "x" }, 7)).toMatchObject({ code: "UNAUTHORIZED" });
     expectNoDataCall();
   });
 });

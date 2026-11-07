@@ -42,45 +42,49 @@ afterEach(() => {
 describe("calls into the database", () => {
   it("approves as the signed-in admin and refreshes the page", async () => {
     answer({ ok: true, status: "paid" });
-    expect(await approveSlipAction(ORDER_ID)).toEqual({ ok: true, data: { status: "paid" } });
+    expect(await approveSlipAction(ORDER_ID, "payment_review")).toEqual({ ok: true, data: { status: "paid" } });
     expect(mocks.rpc).toHaveBeenCalledWith("transition_order", {
       p_order_id: ORDER_ID,
       p_to: "paid",
       p_actor: ADMIN_ID,
+      p_expected_status: "payment_review",
     });
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
   it("rejects with the normalized reason as the signed-in admin", async () => {
     answer({ ok: true, status: "awaiting_payment" });
-    const result = await rejectSlipAction(ORDER_ID, "  ยอดเงิน  ไม่ตรง\n\t<b>โอนขาด</b>　 ");
+    const result = await rejectSlipAction(ORDER_ID, "  ยอดเงิน  ไม่ตรง\n\t<b>โอนขาด</b>　 ", "payment_review");
     expect(result).toEqual({ ok: true, data: { status: "awaiting_payment" } });
     expect(mocks.rpc).toHaveBeenCalledWith("transition_order", {
       p_order_id: ORDER_ID,
       p_to: "awaiting_payment",
       p_actor: ADMIN_ID,
       p_reason: "ยอดเงิน ไม่ตรง <b>โอนขาด</b>",
+      p_expected_status: "payment_review",
     });
   });
 
   it("cancels as the signed-in admin", async () => {
     answer({ ok: true, status: "cancelled" });
-    expect(await cancelOrderAction(ORDER_ID)).toMatchObject({ ok: true });
+    expect(await cancelOrderAction(ORDER_ID, "paid")).toMatchObject({ ok: true });
     expect(mocks.rpc).toHaveBeenCalledWith("transition_order", {
       p_order_id: ORDER_ID,
       p_to: "cancelled",
       p_actor: ADMIN_ID,
+      p_expected_status: "paid",
     });
   });
 
   it("ships with the trimmed tracking number", async () => {
     answer({ ok: true, status: "shipped" });
-    expect(await shipOrderAction(ORDER_ID, "  TH1234567890 ")).toMatchObject({ ok: true });
+    expect(await shipOrderAction(ORDER_ID, "  TH1234567890 ", "paid")).toMatchObject({ ok: true });
     expect(mocks.rpc).toHaveBeenCalledWith("transition_order", {
       p_order_id: ORDER_ID,
       p_to: "shipped",
       p_actor: ADMIN_ID,
       p_tracking_number: "TH1234567890",
+      p_expected_status: "paid",
     });
   });
 
@@ -101,7 +105,7 @@ describe("input checks", () => {
     ["501 characters", "ก".repeat(501)],
     ["not a string", 42],
   ])("refuses a reject reason that is %s without calling the database", async (_, reason) => {
-    const result = await rejectSlipAction(ORDER_ID, reason as string);
+    const result = await rejectSlipAction(ORDER_ID, reason as string, "payment_review");
     expect(result).toMatchObject({ ok: false, code: "INVALID_REASON" });
     if (!result.ok) {
       expect(result.message).toMatch(THAI);
@@ -113,12 +117,12 @@ describe("input checks", () => {
   it("accepts a reason of exactly 500 characters after collapsing whitespace", async () => {
     answer({ ok: true, status: "awaiting_payment" });
     const reason = `  ${"ก".repeat(250)}   ${"ข".repeat(249)}  `;
-    expect(await rejectSlipAction(ORDER_ID, reason)).toMatchObject({ ok: true });
+    expect(await rejectSlipAction(ORDER_ID, reason, "payment_review")).toMatchObject({ ok: true });
     expect(mocks.rpc.mock.calls[0][1].p_reason).toHaveLength(500);
   });
 
   it.each([
-    ["ship", (tracking: unknown) => shipOrderAction(ORDER_ID, tracking as string)],
+    ["ship", (tracking: unknown) => shipOrderAction(ORDER_ID, tracking as string, "paid")],
     ["set tracking", (tracking: unknown) => setTrackingAction(ORDER_ID, tracking as string)],
   ])("%s refuses a blank, overlong or non-string tracking number", async (_, call) => {
     for (const tracking of ["", "   ", "A".repeat(101), undefined]) {
@@ -131,23 +135,44 @@ describe("input checks", () => {
 
   it("accepts a tracking number of exactly 100 characters", async () => {
     answer({ ok: true, status: "shipped" });
-    expect(await shipOrderAction(ORDER_ID, ` ${"A".repeat(100)} `)).toMatchObject({ ok: true });
+    expect(await shipOrderAction(ORDER_ID, ` ${"A".repeat(100)} `, "paid")).toMatchObject({ ok: true });
   });
 
   it("answers a malformed order id as not found without calling the database", async () => {
     for (const id of ["", "not-a-uuid", `${ORDER_ID}x`, 7]) {
-      expect(await approveSlipAction(id as string)).toMatchObject({ ok: false, code: "NOT_FOUND" });
+      expect(await approveSlipAction(id as string, "payment_review")).toMatchObject({ ok: false, code: "NOT_FOUND" });
     }
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 });
 
+describe("expected status", () => {
+  it.each([
+    ["approve", () => approveSlipAction(ORDER_ID, "nonsense")],
+    ["reject", () => rejectSlipAction(ORDER_ID, "ยอดไม่ตรง", undefined as unknown as string)],
+    ["ship", () => shipOrderAction(ORDER_ID, "TH1", "")],
+    ["cancel", () => cancelOrderAction(ORDER_ID, 3 as unknown as string)],
+  ])("%s refuses a missing or unknown expected status without calling the database", async (_, call) => {
+    const result = await call();
+    expect(result).toMatchObject({ ok: false, code: "STATUS_CHANGED" });
+    if (!result.ok) expect(result.message).toMatch(THAI);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it("explains STATUS_CHANGED as a changed order to reload", async () => {
+    answer({ ok: false, code: "STATUS_CHANGED" });
+    const result = await cancelOrderAction(ORDER_ID, "payment_review");
+    expect(result).toMatchObject({ ok: false, code: "STATUS_CHANGED" });
+    if (!result.ok) expect(result.message).toContain("โหลดหน้าใหม่");
+  });
+});
+
 describe("result codes", () => {
-  it.each(["NOT_FOUND", "INVALID_TRANSITION", "INVALID_STATUS", "REASON_REQUIRED", "TRACKING_REQUIRED"])(
+  it.each(["NOT_FOUND", "INVALID_TRANSITION", "INVALID_STATUS", "REASON_REQUIRED", "TRACKING_REQUIRED", "STATUS_CHANGED"])(
     "maps %s to Thai text and keeps the code",
     async (code) => {
       answer({ ok: false, code });
-      const result = await cancelOrderAction(ORDER_ID);
+      const result = await cancelOrderAction(ORDER_ID, "paid");
       expect(result).toMatchObject({ ok: false, code });
       if (!result.ok) expect(result.message).toMatch(THAI);
       expect(mocks.refresh).not.toHaveBeenCalled();
@@ -157,7 +182,7 @@ describe("result codes", () => {
   it("answers an unknown code with a generic Thai error and logs the code only", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     answer({ ok: false, code: "SOMETHING_NEW" });
-    const result = await approveSlipAction(ORDER_ID);
+    const result = await approveSlipAction(ORDER_ID, "payment_review");
     expect(result).toMatchObject({ ok: false, code: "ACTION_FAILED" });
     if (!result.ok) expect(result.message).toMatch(THAI);
     expect(error).toHaveBeenCalledTimes(1);
@@ -167,14 +192,14 @@ describe("result codes", () => {
   it("does not log an unexpected value in place of a code", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     answer({ ok: false, code: "0812345678 123 ถนนทดสอบ" });
-    expect(await approveSlipAction(ORDER_ID)).toMatchObject({ ok: false, code: "ACTION_FAILED" });
+    expect(await approveSlipAction(ORDER_ID, "payment_review")).toMatchObject({ ok: false, code: "ACTION_FAILED" });
     expect(error.mock.calls.flat().join(" ")).not.toContain("0812345678");
   });
 
   it("answers a database error with a generic Thai error and logs its code only", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     answer(null, { code: "22P02", message: "invalid input syntax near 0812345678" });
-    const result = await shipOrderAction(ORDER_ID, "TH1");
+    const result = await shipOrderAction(ORDER_ID, "TH1", "paid");
     expect(result).toMatchObject({ ok: false, code: "ACTION_FAILED" });
     expect(error.mock.calls.flat().join(" ")).not.toContain("0812345678");
     expect(error.mock.calls[0]).toEqual(["transition_order failed", "22P02"]);

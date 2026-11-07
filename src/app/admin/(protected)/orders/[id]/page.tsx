@@ -85,8 +85,8 @@ function ReviewSection({ order }: { order: OrderDetail }) {
             <strong>ตรวจยอดเงินเข้าในแอปธนาคารทุกครั้งก่อนกดยืนยัน</strong> ให้ตรงกับยอดที่ต้องได้รับ
             เพราะรูปสลิปอย่างเดียวปลอมแปลงได้
           </p>
-          {pending ? <ApproveSlipButton orderId={order.id} /> : null}
-          <RejectSlipForm orderId={order.id} />
+          {pending ? <ApproveSlipButton orderId={order.id} status={order.status} /> : null}
+          <RejectSlipForm orderId={order.id} status={order.status} />
         </div>
       </div>
     </Section>
@@ -98,7 +98,7 @@ function ShippingSection({ order }: { order: OrderDetail }) {
     return (
       <Section title="จัดส่ง" id="shipping-title">
         <p className="mb-3">กรอกเลขพัสดุหลังส่งของ ลูกค้าจะเห็นเลขนี้ในหน้าคำสั่งซื้อ</p>
-        <TrackingForm orderId={order.id} />
+        <TrackingForm orderId={order.id} status={order.status} />
       </Section>
     );
   }
@@ -109,7 +109,7 @@ function ShippingSection({ order }: { order: OrderDetail }) {
           เลขพัสดุปัจจุบัน: <strong data-testid="current-tracking">{order.trackingNumber ?? "-"}</strong>
         </p>
         <p className="mb-3 mt-1 text-sm text-ink-soft">หากกรอกผิด แก้เป็นเลขที่ถูกต้องได้ที่นี่</p>
-        <TrackingForm orderId={order.id} correct />
+        <TrackingForm orderId={order.id} status={order.status} correct />
       </Section>
     );
   }
@@ -220,7 +220,7 @@ export default async function AdminOrderPage({ params }: PageProps<"/admin/order
           <p className="mb-3 text-sm text-ink-soft">ระบบจะคืนสินค้าเข้าสต็อก และขอให้ยืนยันอีกครั้งก่อนยกเลิก</p>
           <CancelOrderButton
             orderId={order.id}
-            refund={order.status === "paid" ? "paid" : order.status === "payment_review" ? "maybe" : "none"}
+            status={order.status}
             totalText={formatBaht(order.totalSatang)}
           />
         </Section>

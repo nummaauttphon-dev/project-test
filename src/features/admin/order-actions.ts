@@ -4,11 +4,16 @@ import { refresh } from "next/cache";
 import { fail, ok, type ActionResult } from "@/lib/result";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireAdmin } from "./auth";
-import { isOrderId } from "./queries";
+import { isOrderId, isOrderStatus } from "./queries";
 
 /**
  * Admin order actions. Each one's first statement is requireAdmin(), before any argument is read:
  * tests/unit/admin-guards.test.ts holds every action to that.
+ *
+ * Status changes also take `expectedStatus`, the status the page showed when the admin decided.
+ * transition_order refuses with STATUS_CHANGED if the order has moved on since, so a decision is
+ * never applied to a state the admin did not see (e.g. cancelling a paid order without the refund
+ * warning).
  */
 
 type Status = "paid" | "awaiting_payment" | "shipped" | "cancelled";
@@ -19,13 +24,21 @@ const MESSAGES = {
     "สถานะคำสั่งซื้อเปลี่ยนไปแล้ว จึงทำรายการนี้ไม่ได้ อาจมีการดำเนินการจากหน้าอื่นไปก่อน กรุณาโหลดหน้าใหม่เพื่อดูสถานะล่าสุด",
   INVALID_STATUS: "แก้เลขพัสดุได้เฉพาะคำสั่งซื้อที่จัดส่งแล้ว กรุณาโหลดหน้าใหม่เพื่อดูสถานะล่าสุด",
   REASON_REQUIRED: "กรุณากรอกเหตุผลที่ปฏิเสธสลิป",
+  STATUS_CHANGED:
+    "สถานะคำสั่งซื้อเปลี่ยนไปแล้วหลังจากที่หน้านี้แสดงผล จึงยังไม่ได้ทำรายการนี้ กรุณาโหลดหน้าใหม่ ตรวจสถานะล่าสุด แล้วทำรายการอีกครั้งถ้ายังต้องการ",
   TRACKING_REQUIRED: "กรุณากรอกเลขพัสดุ",
   INVALID_REASON: "กรุณากรอกเหตุผลที่ปฏิเสธสลิป ไม่เกิน 500 ตัวอักษร",
   INVALID_TRACKING: "กรุณากรอกเลขพัสดุ ไม่เกิน 100 ตัวอักษร",
   ACTION_FAILED: "ทำรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง",
 } as const;
 
-type KnownCode = "NOT_FOUND" | "INVALID_TRANSITION" | "INVALID_STATUS" | "REASON_REQUIRED" | "TRACKING_REQUIRED";
+type KnownCode =
+  | "NOT_FOUND"
+  | "INVALID_TRANSITION"
+  | "INVALID_STATUS"
+  | "REASON_REQUIRED"
+  | "TRACKING_REQUIRED"
+  | "STATUS_CHANGED";
 
 const KNOWN_CODES: readonly string[] = [
   "NOT_FOUND",
@@ -33,6 +46,7 @@ const KNOWN_CODES: readonly string[] = [
   "INVALID_STATUS",
   "REASON_REQUIRED",
   "TRACKING_REQUIRED",
+  "STATUS_CHANGED",
 ];
 
 const MAX_REASON = 500;
@@ -92,18 +106,37 @@ function notFound(): ActionResult<never> {
   return fail("NOT_FOUND", MESSAGES.NOT_FOUND);
 }
 
-export async function approveSlipAction(orderId: string): Promise<ActionResult<{ status: Status }>> {
+/** A page always knows the status it showed; without a valid one, the admin must reload. */
+function statusChanged(): ActionResult<never> {
+  return fail("STATUS_CHANGED", MESSAGES.STATUS_CHANGED);
+}
+
+export async function approveSlipAction(
+  orderId: string,
+  expectedStatus: string,
+): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
   if (!isOrderId(orderId)) return notFound();
-  return callDatabase("transition_order", { p_order_id: orderId, p_to: "paid", p_actor: admin.userId });
+  if (!isOrderStatus(expectedStatus)) return statusChanged();
+  return callDatabase("transition_order", {
+    p_order_id: orderId,
+    p_to: "paid",
+    p_actor: admin.userId,
+    p_expected_status: expectedStatus,
+  });
 }
 
 /** The reason is shown to the customer as plain text, exactly as stored. */
-export async function rejectSlipAction(orderId: string, reason: string): Promise<ActionResult<{ status: Status }>> {
+export async function rejectSlipAction(
+  orderId: string,
+  reason: string,
+  expectedStatus: string,
+): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
   if (!isOrderId(orderId)) return notFound();
+  if (!isOrderStatus(expectedStatus)) return statusChanged();
   const normalized = normalizeReason(reason);
   if (!normalized) return fail("INVALID_REASON", MESSAGES.INVALID_REASON, { reason: MESSAGES.INVALID_REASON });
   return callDatabase("transition_order", {
@@ -111,13 +144,19 @@ export async function rejectSlipAction(orderId: string, reason: string): Promise
     p_to: "awaiting_payment",
     p_actor: admin.userId,
     p_reason: normalized,
+    p_expected_status: expectedStatus,
   });
 }
 
-export async function shipOrderAction(orderId: string, tracking: string): Promise<ActionResult<{ status: Status }>> {
+export async function shipOrderAction(
+  orderId: string,
+  tracking: string,
+  expectedStatus: string,
+): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
   if (!isOrderId(orderId)) return notFound();
+  if (!isOrderStatus(expectedStatus)) return statusChanged();
   const normalized = normalizeTracking(tracking);
   if (!normalized) {
     return fail("INVALID_TRACKING", MESSAGES.INVALID_TRACKING, { tracking: MESSAGES.INVALID_TRACKING });
@@ -127,15 +166,28 @@ export async function shipOrderAction(orderId: string, tracking: string): Promis
     p_to: "shipped",
     p_actor: admin.userId,
     p_tracking_number: normalized,
+    p_expected_status: expectedStatus,
   });
 }
 
-/** Cancelling a paid order refunds nothing: the page warns the admin before calling this. */
-export async function cancelOrderAction(orderId: string): Promise<ActionResult<{ status: Status }>> {
+/**
+ * Cancelling a paid order refunds nothing: the page warns the admin before calling this, and the
+ * expected status makes sure that warning matched the order's real state.
+ */
+export async function cancelOrderAction(
+  orderId: string,
+  expectedStatus: string,
+): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
   if (!isOrderId(orderId)) return notFound();
-  return callDatabase("transition_order", { p_order_id: orderId, p_to: "cancelled", p_actor: admin.userId });
+  if (!isOrderStatus(expectedStatus)) return statusChanged();
+  return callDatabase("transition_order", {
+    p_order_id: orderId,
+    p_to: "cancelled",
+    p_actor: admin.userId,
+    p_expected_status: expectedStatus,
+  });
 }
 
 export async function setTrackingAction(orderId: string, tracking: string): Promise<ActionResult<{ status: Status }>> {
