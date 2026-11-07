@@ -39,13 +39,15 @@ npm run dev                   # http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_URL` | browser และ server | URL ของโปรเจกต์ Supabase |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | browser และ server | publishable key ของ Supabase ใช้กับการอ่านที่ผ่าน Row Level Security และการ login ของแอดมิน |
 | `SUPABASE_SECRET_KEY` | server เท่านั้น | secret key ของ Supabase (ข้าม RLS) ใช้ในไฟล์ที่มี `import "server-only"` เท่านั้น |
-| `DATABASE_URL` | server และ test | connection string ของ Postgres ตัวแอปตรวจว่ามีค่านี้ตอนเริ่มทำงาน ส่วน test ใช้เชื่อมฐานข้อมูลโดยตรง |
 | `PROMPTPAY_ID` | server เท่านั้น | เบอร์หรือเลขประจำตัวที่ใช้สร้าง QR พร้อมเพย์ เก็บใน env เพื่อไม่ให้แก้ได้จากหน้าแอดมิน |
 | `ORDER_TOKEN_SECRET` | server เท่านั้น | กุญแจ HMAC สำหรับสร้าง token ของลิงก์ออเดอร์ ถ้าเปลี่ยนค่า ลิงก์ที่สร้างซ้ำจากการกดสั่งซื้อซ้ำจะไม่ตรงของเดิม |
 | `RATE_LIMIT_SALT` | server เท่านั้น | salt สำหรับ hash IP และรหัสออเดอร์ก่อนนับ rate limit |
 | `CRON_SECRET` | server เท่านั้น | secret ที่ Vercel Cron ส่งมาใน `Authorization: Bearer ...` เพื่อเรียก `/api/cron/purge-slips` |
 
-สคริปต์สร้างแอดมินใช้เพิ่มอีกสองตัว ซึ่งไม่ต้องใส่ในโปรเจกต์ Vercel: `ADMIN_EMAIL` และ `ADMIN_PASSWORD`
+ตัวแปรที่ไม่ต้องใส่ในโปรเจกต์ Vercel:
+
+- `DATABASE_URL`: connection string ของ Postgres ใช้เฉพาะ test (integration และตัวช่วยใน `tests/helpers`) `scripts/test-env.mjs` เขียนให้ใน `.env.test.local` ตัวแอปไม่อ่านค่านี้ จึงไม่ต้องเก็บ connection string ของฐานข้อมูลไว้บน Vercel
+- `ADMIN_EMAIL` และ `ADMIN_PASSWORD`: ใช้กับสคริปต์สร้างแอดมินเท่านั้น
 
 สร้างค่าสุ่มสำหรับ secret ได้ด้วย
 

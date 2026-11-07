@@ -5,7 +5,6 @@ const valid = {
   NEXT_PUBLIC_SUPABASE_URL: "http://127.0.0.1:54321",
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "pub",
   SUPABASE_SECRET_KEY: "sec",
-  DATABASE_URL: "postgresql://u:p@127.0.0.1:54322/postgres",
   PROMPTPAY_ID: "0812345678",
   ORDER_TOKEN_SECRET: "a",
   RATE_LIMIT_SALT: "b",
@@ -28,6 +27,11 @@ describe("parseServerEnv", () => {
     expect(() =>
       parseServerEnv({ ...valid, NEXT_PUBLIC_SUPABASE_URL: "not-a-url-xyz" }),
     ).not.toThrow(/not-a-url-xyz/);
+  });
+  it("does not require DATABASE_URL, which only the test tooling uses", () => {
+    expect(() => parseServerEnv(valid)).not.toThrow();
+    const parsed = parseServerEnv({ ...valid, DATABASE_URL: "postgresql://u:p@127.0.0.1:54322/postgres" });
+    expect(parsed).not.toHaveProperty("DATABASE_URL");
   });
   it("returns typed values when complete", () => {
     expect(parseServerEnv(valid).PROMPTPAY_ID).toBe("0812345678");

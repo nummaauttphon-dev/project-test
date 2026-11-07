@@ -1,5 +1,13 @@
 import type { NextConfig } from "next";
 
+// Every response refuses framing (admin pages carry approve, cancel and stock buttons) and MIME
+// sniffing. Deliberately not a full CSP: that would need nonces for the Next.js inline scripts.
+const securityHeaders = [
+  { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+];
+
 const privateHeaders = [
   { key: "X-Robots-Tag", value: "noindex" },
   { key: "Referrer-Policy", value: "no-referrer" },
@@ -44,6 +52,7 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      { source: "/:path*", headers: securityHeaders },
       { source: "/orders/:path*", headers: privateHeaders },
       { source: "/admin/:path*", headers: privateHeaders },
     ];

@@ -2,11 +2,12 @@ import { z } from "zod";
 
 const required = z.string().min(1);
 
+// DATABASE_URL is not here: only the test tooling connects to Postgres directly, and the app must
+// not fail to start for want of a variable it never uses.
 const serverEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.url(),
   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: required,
   SUPABASE_SECRET_KEY: required,
-  DATABASE_URL: required,
   PROMPTPAY_ID: required,
   ORDER_TOKEN_SECRET: required,
   RATE_LIMIT_SALT: required,
