@@ -1,4 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import {
   createAdminUser,
@@ -13,6 +15,7 @@ import {
   submitPassword,
   testEmail,
 } from "../helpers/admin";
+import { seedPendingSlip } from "../helpers/orders";
 import { adminClient, anonClient, resetData, seedOrder } from "../helpers/supabase";
 
 const LOGIN_FAILED = "อีเมลหรือรหัสผ่านไม่ถูกต้อง หรือบัญชีนี้ไม่มีสิทธิ์เข้าใช้งาน";
@@ -241,14 +244,18 @@ test("login and MFA screens have no accessibility violations", async ({ page }) 
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
-// Review Focus 5. Task 11 adds the order page and enables this test.
-test.fixme("expired session on submit changes nothing and returns to login", async ({ page, context }) => {
+// Review Focus 5.
+test("expired session on submit changes nothing and returns to login", async ({ page, context }) => {
   await resetData();
   const { id: orderId } = await seedOrder({ status: "payment_review" });
+  await seedPendingSlip(orderId, readFileSync(path.join(__dirname, "..", "fixtures", "real.png")));
   await signInAdminWithMfa(page);
   await page.goto(`/admin/orders/${orderId}`);
   await context.clearCookies();
   await page.getByRole("button", { name: "ยืนยันการชำระเงิน" }).click();
   await expect(page).toHaveURL(/\/admin\/login/);
   expect(await orderStatus(orderId)).toBe("payment_review");
+  expect((await adminClient().from("payment_slips").select("review_status").eq("order_id", orderId)).data).toEqual([
+    { review_status: "pending" },
+  ]);
 });

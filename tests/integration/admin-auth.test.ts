@@ -1,9 +1,11 @@
 import { spawnSync } from "node:child_process";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { NextRequest } from "next/server";
 import * as OTPAuth from "otpauth";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { getAdminContext, isAdminUser, requireAdmin } from "@/features/admin/auth";
+import { GET as notAdminRoute } from "@/app/admin/not-admin/route";
+import { loginAction } from "@/features/admin/actions";
+import { getAdminContext, isAdminUser, lookupAdmin, requireAdmin } from "@/features/admin/auth";
 import { updateSession } from "@/lib/supabase/proxy";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
@@ -28,6 +30,21 @@ vi.mock("next/headers", () => ({
     delete: (name: string) => jar.delete(name),
   }),
 }));
+
+/** Lets a test replace the service-role client the auth code uses, e.g. with an unreachable one. */
+const adminOverride = vi.hoisted(() => ({ client: null as SupabaseClient | null }));
+
+vi.mock("@/lib/supabase/admin", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/supabase/admin")>();
+  return { createAdminClient: () => adminOverride.client ?? actual.createAdminClient() };
+});
+
+const clientOptions = { auth: { persistSession: false, autoRefreshToken: false } };
+
+/** Requests to this port fail: nothing listens there. */
+function unreachableClient(): SupabaseClient {
+  return createClient("http://127.0.0.1:1", required("SUPABASE_SECRET_KEY"), clientOptions);
+}
 
 const totp = (secret: string) =>
   new OTPAuth.TOTP({ secret, algorithm: "SHA1", digits: 6, period: 30 }).generate();
@@ -80,6 +97,7 @@ afterAll(async () => {
 
 beforeEach(() => {
   jar.clear();
+  adminOverride.client = null;
 });
 
 afterEach(() => {
@@ -118,6 +136,139 @@ describe("isAdminUser", () => {
 
     expect(consoleError.mock.calls.flat().join(" ")).not.toContain(admin.id);
     consoleError.mockRestore();
+  });
+});
+
+describe("lookupAdmin", () => {
+  it("tells a failed lookup apart from a user who is not an admin", async () => {
+    const admin = await createAdminUser();
+    const other = await createNonAdminUser();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await lookupAdmin(adminClient(), admin.id)).toBe("admin");
+    expect(await lookupAdmin(adminClient(), other.id)).toBe("not_admin");
+    expect(await lookupAdmin(unreachableClient(), admin.id)).toBe("error");
+    expect(await lookupAdmin(adminClient(), "not-a-uuid")).toBe("error");
+
+    expect(consoleError.mock.calls.flat().join(" ")).not.toContain(admin.id);
+    consoleError.mockRestore();
+  });
+});
+
+describe("a failed admins lookup", () => {
+  it("is unavailable, answers try-again and keeps the session", async () => {
+    const admin = await createAdminUser();
+    await signInWithTotp(admin);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    adminOverride.client = unreachableClient();
+    expect(await getAdminContext()).toEqual({ state: "unavailable", userId: admin.id });
+    expect(await requireAdmin()).toEqual({
+      ok: false,
+      code: "SERVICE_UNAVAILABLE",
+      message: "ระบบไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่อีกครั้ง",
+    });
+
+    // Nothing was signed out: once the lookup works again, the same session is let in.
+    adminOverride.client = null;
+    expect(await getAdminContext()).toEqual({ state: "ok", userId: admin.id });
+    consoleError.mockRestore();
+  });
+
+  it("at login answers try-again instead of the no-rights message", async () => {
+    const admin = await createAdminUser();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    adminOverride.client = unreachableClient();
+
+    const form = new FormData();
+    form.set("email", admin.email);
+    form.set("password", admin.password);
+    expect(await loginAction(null, form)).toEqual({
+      ok: false,
+      code: "SERVICE_UNAVAILABLE",
+      message: "ระบบไม่พร้อมใช้งานชั่วคราว กรุณาลองใหม่อีกครั้ง",
+    });
+    expect([...jar.keys()].filter((name) => name.startsWith("sb-"))).toEqual([]);
+    consoleError.mockRestore();
+  });
+});
+
+describe("signing out a non-admin", () => {
+  /** A second, independent session of the same user, as on another device. */
+  async function otherDevice(user: TestUser) {
+    const client = createClient(
+      required("NEXT_PUBLIC_SUPABASE_URL"),
+      required("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+      clientOptions,
+    );
+    const { error } = await client.auth.signInWithPassword({ email: user.email, password: user.password });
+    if (error) throw error;
+    return client;
+  }
+
+  it("the not-admin route ends only this browser's session", async () => {
+    const user = await createNonAdminUser();
+    const elsewhere = await otherDevice(user);
+    await signIn(user);
+    const { session } = readSession();
+
+    await expect(notAdminRoute()).rejects.toMatchObject({
+      digest: expect.stringContaining("/admin/login?error=denied"),
+    });
+
+    expect([...jar.keys()].filter((name) => name.startsWith("sb-"))).toEqual([]);
+    const here = createClient(
+      required("NEXT_PUBLIC_SUPABASE_URL"),
+      required("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+      clientOptions,
+    );
+    const revoked = await here.auth.refreshSession({ refresh_token: String(session.refresh_token) });
+    expect(revoked.error).not.toBeNull();
+    const kept = await elsewhere.auth.refreshSession();
+    expect(kept.error).toBeNull();
+  });
+
+  it("a login refused for lack of rights ends only that new session", async () => {
+    const user = await createNonAdminUser();
+    const elsewhere = await otherDevice(user);
+
+    const form = new FormData();
+    form.set("email", user.email);
+    form.set("password", user.password);
+    expect(await loginAction(null, form)).toMatchObject({ ok: false, code: "INVALID_CREDENTIALS" });
+
+    expect([...jar.keys()].filter((name) => name.startsWith("sb-"))).toEqual([]);
+    expect((await elsewhere.auth.refreshSession()).error).toBeNull();
+  });
+});
+
+describe("MFA enrollment through GoTrue", () => {
+  it("refuses another factor from an aal1 session once a TOTP factor is verified", async () => {
+    const admin = await createAdminUser();
+    await signInWithTotp(admin);
+    jar.clear();
+    await signIn(admin);
+    const { session } = readSession();
+    const accessToken = String(session.access_token);
+    expect(JSON.parse(Buffer.from(accessToken.split(".")[1], "base64url").toString("utf8")).aal).toBe("aal1");
+
+    // Straight to the Auth API, past any check supabase-js might make first.
+    const response = await fetch(`${required("NEXT_PUBLIC_SUPABASE_URL")}/auth/v1/factors`, {
+      method: "POST",
+      headers: {
+        apikey: required("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ factor_type: "totp", friendly_name: "attacker" }),
+    });
+    const body = (await response.json()) as { error_code?: string; code?: string | number };
+    expect(response.ok).toBe(false);
+    expect(body.error_code ?? body.code).toBe("insufficient_aal");
+
+    const { data, error } = await adminClient().auth.admin.mfa.listFactors({ userId: admin.id });
+    expect(error).toBeNull();
+    expect(data?.factors.map((factor) => factor.status)).toEqual(["verified"]);
   });
 });
 

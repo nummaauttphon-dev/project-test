@@ -61,6 +61,17 @@ export async function seedRejectedSlip(orderId: string, reason: string): Promise
   if (error) throw new Error(`seedRejectedSlip: ${error.message}`);
 }
 
+/** Uploads `image` (a PNG) as the order's pending slip, as submit_payment_slip would, and returns its path. */
+export async function seedPendingSlip(orderId: string, image: Uint8Array): Promise<string> {
+  const path = `${orderId}/${randomBytes(8).toString("hex")}.png`;
+  const db = adminClient();
+  const upload = await db.storage.from("payment-slips").upload(path, image, { contentType: "image/png" });
+  if (upload.error) throw new Error(`seedPendingSlip upload: ${upload.error.message}`);
+  const { error } = await db.from("payment_slips").insert({ order_id: orderId, storage_path: path });
+  if (error) throw new Error(`seedPendingSlip: ${error.message}`);
+  return path;
+}
+
 /** Every object path in the private slip bucket under one order folder. */
 export async function slipObjects(orderId: string): Promise<string[]> {
   const { data, error } = await adminClient().storage.from("payment-slips").list(orderId);

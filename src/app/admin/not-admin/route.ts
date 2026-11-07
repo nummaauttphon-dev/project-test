@@ -8,6 +8,6 @@ import { getAdminContext, signOutCurrentSession } from "@/features/admin/auth";
 export async function GET() {
   const { state } = await getAdminContext();
   if (state !== "not_admin") redirect("/admin/login");
-  await signOutCurrentSession();
+  await signOutCurrentSession("local");
   redirect("/admin/login?error=denied");
 }

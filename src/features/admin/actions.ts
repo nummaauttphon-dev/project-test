@@ -7,7 +7,7 @@ import { fail, ok, type ActionResult } from "@/lib/result";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabase } from "@/lib/supabase/server";
 import { STORE_NAME } from "@/lib/store-config";
-import { adminPathFor, getAdminContext, isAdminUser, signOutCurrentSession } from "./auth";
+import { adminPathFor, getAdminContext, lookupAdmin, signOutCurrentSession } from "./auth";
 import { ADMIN_MESSAGES, loginFailure, mfaFailure } from "./auth-messages";
 
 const DENIED_PATH = "/admin/login?error=denied";
@@ -31,15 +31,19 @@ export async function loginAction(_previous: ActionResult<never> | null, formDat
   const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
   if (error) return failure(loginFailure(error));
 
-  if (!(await isAdminUser(createAdminClient(), data.user.id))) {
-    await signOutCurrentSession();
-    return fail("INVALID_CREDENTIALS", ADMIN_MESSAGES.LOGIN_FAILED);
+  const lookup = await lookupAdmin(createAdminClient(), data.user.id);
+  if (lookup !== "admin") {
+    // Only this new session ends; a failed lookup says nothing about the user's rights.
+    await signOutCurrentSession("local");
+    return lookup === "error"
+      ? fail("SERVICE_UNAVAILABLE", ADMIN_MESSAGES.SERVICE_UNAVAILABLE)
+      : fail("INVALID_CREDENTIALS", ADMIN_MESSAGES.LOGIN_FAILED);
   }
   redirect("/admin/mfa");
 }
 
 export async function signOutAction(): Promise<void> {
-  await signOutCurrentSession();
+  await signOutCurrentSession("global");
   redirect("/admin/login");
 }
 
@@ -53,7 +57,7 @@ async function requireMfaPending(): Promise<void> {
   const { state } = await getAdminContext();
   if (state === "mfa_required") return;
   if (state === "not_admin") {
-    await signOutCurrentSession();
+    await signOutCurrentSession("local");
     redirect(DENIED_PATH);
   }
   redirect(adminPathFor(state));
