@@ -3,6 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { serverEnv } from "../env";
+import { authCookieOptions } from "./cookie-options";
 
 /** Cookie-aware client using the publishable key, so Row Level Security applies. */
 export async function createServerSupabase(): Promise<SupabaseClient> {
@@ -12,6 +13,7 @@ export async function createServerSupabase(): Promise<SupabaseClient> {
     env.NEXT_PUBLIC_SUPABASE_URL,
     env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     {
+      cookieOptions: authCookieOptions(),
       cookies: {
         getAll: () => cookieStore.getAll(),
         setAll: (toSet) => {
