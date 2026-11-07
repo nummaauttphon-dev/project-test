@@ -691,3 +691,71 @@ describe("create_order", () => {
     });
   });
 });
+
+describe("order numbers", () => {
+  /** Moves the sequence for one test and puts it back after, so other tests keep 6-digit numbers. */
+  async function withSequenceAt(value: number, body: () => Promise<void>): Promise<void> {
+    const client = await connect();
+    try {
+      const { rows } = await client.query<{ last_value: string; is_called: boolean }>(
+        "select last_value, is_called from public.order_number_seq",
+      );
+      await client.query("select setval('public.order_number_seq', $1)", [value]);
+      try {
+        await body();
+      } finally {
+        await resetData();
+        await client.query("select setval('public.order_number_seq', $1, $2)", [rows[0].last_value, rows[0].is_called]);
+      }
+    } finally {
+      await client.end();
+    }
+  }
+
+  beforeEach(async () => {
+    await resetData();
+  });
+
+  it("keeps six digits below one million", async () => {
+    await withSequenceAt(41, async () => {
+      expect((await seedOrder()).order_number).toBe("ORD-000042");
+    });
+  });
+
+  it("grows past 999,999 instead of truncating, and checkout keeps working", async () => {
+    await withSequenceAt(999_998, async () => {
+      expect((await seedOrder()).order_number).toBe("ORD-999999");
+      expect((await seedOrder()).order_number).toBe("ORD-1000000");
+      const product = await seedProduct({ stock_quantity: 5 });
+      const placed = await placeRpc(product, randomUUID());
+      expectStatus(placed, "created");
+      expect(placed.order_number).toBe("ORD-1000001");
+    });
+  });
+
+  it("grants EXECUTE on next_order_number to service_role only and pins search_path", async () => {
+    const client = await connect();
+    try {
+      const { rows } = await client.query<Record<string, unknown>>(
+        `select
+           has_function_privilege('public', $1::regprocedure, 'execute') as public_exec,
+           has_function_privilege('anon', $1::regprocedure, 'execute') as anon_exec,
+           has_function_privilege('authenticated', $1::regprocedure, 'execute') as auth_exec,
+           has_function_privilege('service_role', $1::regprocedure, 'execute') as service_exec,
+           (select p.proconfig from pg_proc p where p.oid = $1::regprocedure) as config,
+           (select p.prosecdef from pg_proc p where p.oid = $1::regprocedure) as definer`,
+        ["public.next_order_number()"],
+      );
+      expect(rows[0]).toEqual({
+        public_exec: false,
+        anon_exec: false,
+        auth_exec: false,
+        service_exec: true,
+        config: ['search_path=""'],
+        definer: false,
+      });
+    } finally {
+      await client.end();
+    }
+  });
+});

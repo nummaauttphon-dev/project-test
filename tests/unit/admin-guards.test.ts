@@ -32,14 +32,15 @@ import {
 
 const ORDER_ID = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
 const PRODUCT_ID = "7a2d3b4c-5e6f-4a71-8b8c-0d1e2f3a4b5c";
+const SLIP_ID = "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 
 /**
  * Every admin Server Action with valid sample arguments, so a refusal can only come from the
  * guard.
  */
 const allAdminActions: [name: string, call: () => Promise<unknown>][] = [
-  ["approveSlipAction", () => approveSlipAction(ORDER_ID, "payment_review")],
-  ["rejectSlipAction", () => rejectSlipAction(ORDER_ID, "ยอดเงินไม่ตรงกับคำสั่งซื้อ", "payment_review")],
+  ["approveSlipAction", () => approveSlipAction(ORDER_ID, "payment_review", SLIP_ID)],
+  ["rejectSlipAction", () => rejectSlipAction(ORDER_ID, "ยอดเงินไม่ตรงกับคำสั่งซื้อ", "payment_review", SLIP_ID)],
   ["shipOrderAction", () => shipOrderAction(ORDER_ID, "TH1234567890", "paid")],
   ["cancelOrderAction", () => cancelOrderAction(ORDER_ID, "paid")],
   ["setTrackingAction", () => setTrackingAction(ORDER_ID, "TH0987654321")],

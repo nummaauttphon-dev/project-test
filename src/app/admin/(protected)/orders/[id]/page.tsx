@@ -87,8 +87,8 @@ function ReviewSection({ order }: { order: OrderDetail }) {
           </p>
           {pending ? (
             <>
-              <ApproveSlipButton orderId={order.id} status={order.status} />
-              <RejectSlipForm orderId={order.id} status={order.status} />
+              <ApproveSlipButton orderId={order.id} status={order.status} slipId={pending.id} />
+              <RejectSlipForm orderId={order.id} status={order.status} slipId={pending.id} />
             </>
           ) : null}
         </div>

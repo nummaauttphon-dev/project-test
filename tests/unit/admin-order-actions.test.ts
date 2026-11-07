@@ -24,6 +24,7 @@ import {
 
 const ORDER_ID = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
 const ADMIN_ID = "0a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d";
+const SLIP_ID = "1b2c3d4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e";
 const THAI = /[฀-๿]/;
 
 function answer(data: unknown, error: unknown = null) {
@@ -42,19 +43,20 @@ afterEach(() => {
 describe("calls into the database", () => {
   it("approves as the signed-in admin and refreshes the page", async () => {
     answer({ ok: true, status: "paid" });
-    expect(await approveSlipAction(ORDER_ID, "payment_review")).toEqual({ ok: true, data: { status: "paid" } });
+    expect(await approveSlipAction(ORDER_ID, "payment_review", SLIP_ID)).toEqual({ ok: true, data: { status: "paid" } });
     expect(mocks.rpc).toHaveBeenCalledWith("transition_order", {
       p_order_id: ORDER_ID,
       p_to: "paid",
       p_actor: ADMIN_ID,
       p_expected_status: "payment_review",
+      p_expected_slip_id: SLIP_ID,
     });
     expect(mocks.refresh).toHaveBeenCalledTimes(1);
   });
 
   it("rejects with the normalized reason as the signed-in admin", async () => {
     answer({ ok: true, status: "awaiting_payment" });
-    const result = await rejectSlipAction(ORDER_ID, "  ยอดเงิน  ไม่ตรง\n\t<b>โอนขาด</b>　 ", "payment_review");
+    const result = await rejectSlipAction(ORDER_ID, "  ยอดเงิน  ไม่ตรง\n\t<b>โอนขาด</b>　 ", "payment_review", SLIP_ID);
     expect(result).toEqual({ ok: true, data: { status: "awaiting_payment" } });
     expect(mocks.rpc).toHaveBeenCalledWith("transition_order", {
       p_order_id: ORDER_ID,
@@ -62,6 +64,7 @@ describe("calls into the database", () => {
       p_actor: ADMIN_ID,
       p_reason: "ยอดเงิน ไม่ตรง <b>โอนขาด</b>",
       p_expected_status: "payment_review",
+      p_expected_slip_id: SLIP_ID,
     });
   });
 
@@ -105,7 +108,7 @@ describe("input checks", () => {
     ["501 characters", "ก".repeat(501)],
     ["not a string", 42],
   ])("refuses a reject reason that is %s without calling the database", async (_, reason) => {
-    const result = await rejectSlipAction(ORDER_ID, reason as string, "payment_review");
+    const result = await rejectSlipAction(ORDER_ID, reason as string, "payment_review", SLIP_ID);
     expect(result).toMatchObject({ ok: false, code: "INVALID_REASON" });
     if (!result.ok) {
       expect(result.message).toMatch(THAI);
@@ -117,7 +120,7 @@ describe("input checks", () => {
   it("accepts a reason of exactly 500 characters after collapsing whitespace", async () => {
     answer({ ok: true, status: "awaiting_payment" });
     const reason = `  ${"ก".repeat(250)}   ${"ข".repeat(249)}  `;
-    expect(await rejectSlipAction(ORDER_ID, reason, "payment_review")).toMatchObject({ ok: true });
+    expect(await rejectSlipAction(ORDER_ID, reason, "payment_review", SLIP_ID)).toMatchObject({ ok: true });
     expect(mocks.rpc.mock.calls[0][1].p_reason).toHaveLength(500);
   });
 
@@ -140,7 +143,7 @@ describe("input checks", () => {
 
   it("answers a malformed order id as not found without calling the database", async () => {
     for (const id of ["", "not-a-uuid", `${ORDER_ID}x`, 7]) {
-      expect(await approveSlipAction(id as string, "payment_review")).toMatchObject({ ok: false, code: "NOT_FOUND" });
+      expect(await approveSlipAction(id as string, "payment_review", SLIP_ID)).toMatchObject({ ok: false, code: "NOT_FOUND" });
     }
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
@@ -148,11 +151,23 @@ describe("input checks", () => {
 
 describe("expected status", () => {
   it.each([
-    ["approve", () => approveSlipAction(ORDER_ID, "nonsense")],
-    ["reject", () => rejectSlipAction(ORDER_ID, "ยอดไม่ตรง", undefined as unknown as string)],
+    ["approve", () => approveSlipAction(ORDER_ID, "nonsense", SLIP_ID)],
+    ["reject", () => rejectSlipAction(ORDER_ID, "ยอดไม่ตรง", undefined as unknown as string, SLIP_ID)],
     ["ship", () => shipOrderAction(ORDER_ID, "TH1", "")],
     ["cancel", () => cancelOrderAction(ORDER_ID, 3 as unknown as string)],
   ])("%s refuses a missing or unknown expected status without calling the database", async (_, call) => {
+    const result = await call();
+    expect(result).toMatchObject({ ok: false, code: "STATUS_CHANGED" });
+    if (!result.ok) expect(result.message).toMatch(THAI);
+    expect(mocks.rpc).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["approve without a slip id", () => approveSlipAction(ORDER_ID, "payment_review", undefined as unknown as string)],
+    ["approve with a malformed slip id", () => approveSlipAction(ORDER_ID, "payment_review", "not-a-uuid")],
+    ["reject without a slip id", () => rejectSlipAction(ORDER_ID, "ยอดไม่ตรง", "payment_review", undefined as unknown as string)],
+    ["reject with a malformed slip id", () => rejectSlipAction(ORDER_ID, "ยอดไม่ตรง", "payment_review", `${SLIP_ID}x`)],
+  ])("%s refuses as STATUS_CHANGED without calling the database", async (_, call) => {
     const result = await call();
     expect(result).toMatchObject({ ok: false, code: "STATUS_CHANGED" });
     if (!result.ok) expect(result.message).toMatch(THAI);
@@ -182,7 +197,7 @@ describe("result codes", () => {
   it("answers an unknown code with a generic Thai error and logs the code only", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     answer({ ok: false, code: "SOMETHING_NEW" });
-    const result = await approveSlipAction(ORDER_ID, "payment_review");
+    const result = await approveSlipAction(ORDER_ID, "payment_review", SLIP_ID);
     expect(result).toMatchObject({ ok: false, code: "ACTION_FAILED" });
     if (!result.ok) expect(result.message).toMatch(THAI);
     expect(error).toHaveBeenCalledTimes(1);
@@ -192,7 +207,7 @@ describe("result codes", () => {
   it("does not log an unexpected value in place of a code", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     answer({ ok: false, code: "0812345678 123 ถนนทดสอบ" });
-    expect(await approveSlipAction(ORDER_ID, "payment_review")).toMatchObject({ ok: false, code: "ACTION_FAILED" });
+    expect(await approveSlipAction(ORDER_ID, "payment_review", SLIP_ID)).toMatchObject({ ok: false, code: "ACTION_FAILED" });
     expect(error.mock.calls.flat().join(" ")).not.toContain("0812345678");
   });
 

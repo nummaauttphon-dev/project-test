@@ -17,11 +17,14 @@ import { ActionError, DANGER, FIELD, FieldError, PRIMARY, SECONDARY, useAdminAct
  */
 type Shown = { orderId: string; status: OrderStatus };
 
-export function ApproveSlipButton({ orderId, status }: Shown) {
+/** Approve and reject also send the id of the pending slip the page showed. */
+type ShownSlip = Shown & { slipId: string };
+
+export function ApproveSlipButton({ orderId, status, slipId }: ShownSlip) {
   const { pending, failure, run } = useAdminAction();
   return (
     <div className="space-y-3">
-      <button type="button" disabled={pending} className={`${PRIMARY} w-full`} onClick={() => run(() => approveSlipAction(orderId, status))}>
+      <button type="button" disabled={pending} className={`${PRIMARY} w-full`} onClick={() => run(() => approveSlipAction(orderId, status, slipId))}>
         {pending ? "กำลังบันทึก…" : "ยืนยันการชำระเงิน"}
       </button>
       <ActionError failure={failure} />
@@ -29,7 +32,7 @@ export function ApproveSlipButton({ orderId, status }: Shown) {
   );
 }
 
-export function RejectSlipForm({ orderId, status }: Shown) {
+export function RejectSlipForm({ orderId, status, slipId }: ShownSlip) {
   const { pending, failure, run } = useAdminAction();
   const [reason, setReason] = useState("");
   const id = useId();
@@ -37,7 +40,7 @@ export function RejectSlipForm({ orderId, status }: Shown) {
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    run(() => rejectSlipAction(orderId, reason, status), () => setReason(""));
+    run(() => rejectSlipAction(orderId, reason, status, slipId), () => setReason(""));
   }
 
   return (

@@ -14,6 +14,10 @@ import { isOrderId, isOrderStatus } from "./queries";
  * transition_order refuses with STATUS_CHANGED if the order has moved on since, so a decision is
  * never applied to a state the admin did not see (e.g. cancelling a paid order without the refund
  * warning).
+ *
+ * Approve and reject also take `expectedSlipId`, the pending slip the page showed. If that slip was
+ * reviewed elsewhere and the customer sent another, transition_order refuses with STATUS_CHANGED,
+ * so a slip is never approved, or given a reason, without the admin having seen it.
  */
 
 type Status = "paid" | "awaiting_payment" | "shipped" | "cancelled";
@@ -114,16 +118,18 @@ function statusChanged(): ActionResult<never> {
 export async function approveSlipAction(
   orderId: string,
   expectedStatus: string,
+  expectedSlipId: string,
 ): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
   if (!isOrderId(orderId)) return notFound();
-  if (!isOrderStatus(expectedStatus)) return statusChanged();
+  if (!isOrderStatus(expectedStatus) || !isOrderId(expectedSlipId)) return statusChanged();
   return callDatabase("transition_order", {
     p_order_id: orderId,
     p_to: "paid",
     p_actor: admin.userId,
     p_expected_status: expectedStatus,
+    p_expected_slip_id: expectedSlipId,
   });
 }
 
@@ -132,11 +138,12 @@ export async function rejectSlipAction(
   orderId: string,
   reason: string,
   expectedStatus: string,
+  expectedSlipId: string,
 ): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
   if (!isOrderId(orderId)) return notFound();
-  if (!isOrderStatus(expectedStatus)) return statusChanged();
+  if (!isOrderStatus(expectedStatus) || !isOrderId(expectedSlipId)) return statusChanged();
   const normalized = normalizeReason(reason);
   if (!normalized) return fail("INVALID_REASON", MESSAGES.INVALID_REASON, { reason: MESSAGES.INVALID_REASON });
   return callDatabase("transition_order", {
@@ -145,6 +152,7 @@ export async function rejectSlipAction(
     p_actor: admin.userId,
     p_reason: normalized,
     p_expected_status: expectedStatus,
+    p_expected_slip_id: expectedSlipId,
   });
 }
 
