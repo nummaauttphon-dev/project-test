@@ -81,6 +81,16 @@ test("shows slip next to expected amount and approves", async ({ page }) => {
   expect(await slipsOf(order.id)).toEqual([{ review_status: "approved", reviewed_by: admin.id, reject_reason: null }]);
 });
 
+test("without a pending slip, neither approve nor reject is offered", async ({ page }) => {
+  const { order } = await seedOrderWithToken({ status: "payment_review" });
+  await page.goto(`/admin/orders/${order.id}`);
+  const review = page.getByRole("region", { name: "ตรวจสลิป" });
+  await expect(review).toContainText("ไม่พบสลิปที่รอตรวจ");
+  await expect(review.getByRole("button", { name: "ยืนยันการชำระเงิน" })).toHaveCount(0);
+  await expect(review.getByLabel("เหตุผลที่ปฏิเสธสลิป")).toHaveCount(0);
+  await expect(review.getByRole("button", { name: "ปฏิเสธสลิป" })).toHaveCount(0);
+});
+
 test("rejecting requires a reason shown to the customer", async ({ page }) => {
   const { order, token } = await seedReview();
   await page.goto(`/admin/orders/${order.id}`);

@@ -85,8 +85,12 @@ function ReviewSection({ order }: { order: OrderDetail }) {
             <strong>ตรวจยอดเงินเข้าในแอปธนาคารทุกครั้งก่อนกดยืนยัน</strong> ให้ตรงกับยอดที่ต้องได้รับ
             เพราะรูปสลิปอย่างเดียวปลอมแปลงได้
           </p>
-          {pending ? <ApproveSlipButton orderId={order.id} status={order.status} /> : null}
-          <RejectSlipForm orderId={order.id} status={order.status} />
+          {pending ? (
+            <>
+              <ApproveSlipButton orderId={order.id} status={order.status} />
+              <RejectSlipForm orderId={order.id} status={order.status} />
+            </>
+          ) : null}
         </div>
       </div>
     </Section>

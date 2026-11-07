@@ -43,16 +43,16 @@ export function anonClient(): SupabaseClient {
   );
 }
 
-const SLIP_BUCKET = "payment-slips";
+const BUCKETS = ["payment-slips", "product-images"];
 
-async function emptyBucket(prefix = ""): Promise<void> {
-  const storage = adminClient().storage.from(SLIP_BUCKET);
+async function emptyBucket(bucket: string, prefix = ""): Promise<void> {
+  const storage = adminClient().storage.from(bucket);
   const { data, error } = await storage.list(prefix, { limit: 1000 });
   if (error) throw error;
   const files: string[] = [];
   for (const entry of data ?? []) {
     const path = prefix ? `${prefix}/${entry.name}` : entry.name;
-    if (entry.id === null) await emptyBucket(path);
+    if (entry.id === null) await emptyBucket(bucket, path);
     else files.push(path);
   }
   if (files.length > 0) {
@@ -61,7 +61,7 @@ async function emptyBucket(prefix = ""): Promise<void> {
   }
 }
 
-/** Deletes test data in foreign-key order and clears the slip bucket. Keeps store_settings. */
+/** Deletes test data in foreign-key order and clears both storage buckets. Keeps store_settings. */
 export async function resetData(): Promise<void> {
   const db = adminClient();
   const nil = "00000000-0000-0000-0000-000000000000";
@@ -71,7 +71,7 @@ export async function resetData(): Promise<void> {
   }
   const limits = await db.from("rate_limits").delete().neq("action", "");
   if (limits.error) throw new Error(`resetData rate_limits: ${limits.error.message}`);
-  await emptyBucket();
+  for (const bucket of BUCKETS) await emptyBucket(bucket);
 }
 
 function productRow(overrides: Record<string, unknown> = {}) {

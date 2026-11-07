@@ -1,7 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useId, useRef, useState, useTransition, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import {
   approveSlipAction,
   cancelOrderAction,
@@ -10,76 +9,7 @@ import {
   shipOrderAction,
 } from "@/features/admin/order-actions";
 import type { OrderStatus } from "@/features/orders/queries";
-import type { ActionResult } from "@/lib/result";
-
-const GENERIC_ERROR = "ทำรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
-
-const PRIMARY =
-  "inline-flex min-h-12 items-center justify-center rounded-full bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60";
-const SECONDARY =
-  "inline-flex min-h-12 items-center justify-center rounded-full border border-line-strong bg-surface px-6 font-semibold hover:bg-sunken disabled:opacity-60";
-const DANGER =
-  "inline-flex min-h-12 items-center justify-center rounded-full border border-danger-ink bg-danger-bg px-6 font-semibold text-danger-ink hover:bg-surface disabled:opacity-60";
-const FIELD =
-  "mt-1 block w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-base aria-[invalid=true]:border-danger-ink";
-
-type Failure = { message: string; fields?: Record<string, string> };
-
-/**
- * Runs an admin action. On success the action has already refreshed the page; an expired or
- * missing session goes back to login, since nothing on this page can work without one.
- */
-function useAdminAction() {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  const [failure, setFailure] = useState<Failure | null>(null);
-
-  function run(call: () => Promise<ActionResult<unknown>>, onSuccess?: () => void) {
-    setFailure(null);
-    startTransition(async () => {
-      let result: ActionResult<unknown>;
-      try {
-        result = await call();
-      } catch {
-        setFailure({ message: GENERIC_ERROR });
-        return;
-      }
-      if (result.ok) {
-        onSuccess?.();
-        return;
-      }
-      if (result.code === "UNAUTHORIZED") {
-        router.replace("/admin/login");
-        return;
-      }
-      setFailure({ message: result.message, fields: result.fieldErrors });
-    });
-  }
-
-  return { pending, failure, run };
-}
-
-/** Announced by screen readers; a field's own error is shown under the field instead. */
-function ActionError({ failure }: { failure: Failure | null }) {
-  const show = failure && !failure.fields;
-  return (
-    <div role="alert">
-      {show ? (
-        <p data-testid="action-error" className="rounded-lg border border-danger-ink bg-danger-bg p-3 text-danger-ink">
-          {failure.message}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function FieldError({ id, testId, message }: { id: string; testId: string; message?: string }) {
-  return message ? (
-    <p id={id} data-testid={testId} className="mt-1 text-danger-ink">
-      {message}
-    </p>
-  ) : null;
-}
+import { ActionError, DANGER, FIELD, FieldError, PRIMARY, SECONDARY, useAdminAction } from "./admin-ui";
 
 /**
  * Every component takes `status`, the order's status as this page showed it. Actions send it along,

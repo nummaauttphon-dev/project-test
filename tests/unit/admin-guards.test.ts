@@ -20,6 +20,8 @@ vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: mocks.createAdminCli
 vi.mock("@/lib/supabase/server", () => ({ createServerSupabase: mocks.createServerSupabase }));
 vi.mock("next/cache", () => ({ refresh: mocks.refresh, revalidatePath: vi.fn(), updateTag: vi.fn() }));
 
+import { adjustStockAction, saveProductAction, setProductActiveAction } from "@/features/admin/product-actions";
+import { saveSettingsAction } from "@/features/admin/settings-actions";
 import {
   approveSlipAction,
   cancelOrderAction,
@@ -29,10 +31,11 @@ import {
 } from "@/features/admin/order-actions";
 
 const ORDER_ID = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
+const PRODUCT_ID = "7a2d3b4c-5e6f-4a71-8b8c-0d1e2f3a4b5c";
 
 /**
  * Every admin Server Action with valid sample arguments, so a refusal can only come from the
- * guard. Task 12 adds its product and settings actions here.
+ * guard.
  */
 const allAdminActions: [name: string, call: () => Promise<unknown>][] = [
   ["approveSlipAction", () => approveSlipAction(ORDER_ID, "payment_review")],
@@ -40,7 +43,27 @@ const allAdminActions: [name: string, call: () => Promise<unknown>][] = [
   ["shipOrderAction", () => shipOrderAction(ORDER_ID, "TH1234567890", "paid")],
   ["cancelOrderAction", () => cancelOrderAction(ORDER_ID, "paid")],
   ["setTrackingAction", () => setTrackingAction(ORDER_ID, "TH0987654321")],
+  [
+    "saveProductAction",
+    () =>
+      saveProductAction(
+        { slug: "mug", name: "แก้ว", description: "", price: "10", stock: "1" },
+        new File(["x"], "a.png", { type: "image/png" }),
+      ),
+  ],
+  ["setProductActiveAction", () => setProductActiveAction(PRODUCT_ID, false)],
+  ["adjustStockAction", () => adjustStockAction(PRODUCT_ID, 5)],
+  [
+    "saveSettingsAction",
+    () => saveSettingsAction({ shippingFee: "50", paymentWindowMinutes: "1440", contactUrl: "" }),
+  ],
 ];
+
+const actionModules = [
+  "@/features/admin/order-actions",
+  "@/features/admin/product-actions",
+  "@/features/admin/settings-actions",
+] as const;
 
 const UNAUTHORIZED = { ok: false, code: "UNAUTHORIZED", message: "กรุณาเข้าสู่ระบบอีกครั้ง" };
 const UNAVAILABLE = {
@@ -63,8 +86,8 @@ beforeEach(() => {
 });
 
 describe("admin action guards", () => {
-  it("covers every export of the order actions module", async () => {
-    const actions = await import("@/features/admin/order-actions");
+  it.each(actionModules)("covers every export of %s", async (module) => {
+    const actions = await import(/* @vite-ignore */ module);
     const names = new Set(allAdminActions.map(([name]) => name));
     for (const name of Object.keys(actions)) expect(names, name).toContain(name);
   });
@@ -84,10 +107,8 @@ describe("admin action guards", () => {
 
   it.each(allAdminActions)("%s checks the caller before reading its input", async (name) => {
     mocks.requireAdmin.mockResolvedValue(UNAUTHORIZED);
-    const actions = (await import("@/features/admin/order-actions")) as unknown as Record<
-      string,
-      (...args: unknown[]) => Promise<unknown>
-    >;
+    const modules = await Promise.all(actionModules.map((module) => import(/* @vite-ignore */ module)));
+    const actions = Object.assign({}, ...modules) as Record<string, (...args: unknown[]) => Promise<unknown>>;
     expect(await actions[name](null, { toString: () => "x" }, 7)).toMatchObject({ code: "UNAUTHORIZED" });
     expectNoDataCall();
   });

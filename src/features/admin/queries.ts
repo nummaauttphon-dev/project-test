@@ -306,3 +306,58 @@ export async function getOrderDetail(client: SupabaseClient, id: string): Promis
     })),
   };
 }
+
+export type AdminProduct = {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  priceSatang: number;
+  stockQuantity: number;
+  imagePath: string | null;
+  isActive: boolean;
+};
+
+const PRODUCT_COLUMNS = "id, slug, name, description, price_satang, stock_quantity, image_path, is_active";
+
+type ProductRow = {
+  id: unknown;
+  slug: unknown;
+  name: unknown;
+  description: unknown;
+  price_satang: unknown;
+  stock_quantity: unknown;
+  image_path: unknown;
+  is_active: unknown;
+};
+
+function toAdminProduct(row: ProductRow): AdminProduct {
+  return {
+    id: String(row.id),
+    slug: String(row.slug),
+    name: String(row.name),
+    description: String(row.description),
+    priceSatang: Number(row.price_satang),
+    stockQuantity: Number(row.stock_quantity),
+    imagePath: row.image_path ? String(row.image_path) : null,
+    isActive: row.is_active === true,
+  };
+}
+
+/** Every product, hidden ones included: only the admin client can read them. Newest first. */
+export async function listAdminProducts(client: SupabaseClient): Promise<AdminProduct[]> {
+  const { data, error } = await client
+    .from("products")
+    .select(PRODUCT_COLUMNS)
+    .order("created_at", { ascending: false })
+    .order("id");
+  if (error) throw failure("listAdminProducts", error);
+  return ((data ?? []) as ProductRow[]).map(toAdminProduct);
+}
+
+export async function getAdminProduct(client: SupabaseClient, id: string): Promise<AdminProduct | null> {
+  if (!isOrderId(id)) return null;
+  const { data, error } = await client.from("products").select(PRODUCT_COLUMNS).eq("id", id).maybeSingle();
+  if (error) throw failure("getAdminProduct", error);
+  return data ? toAdminProduct(data as ProductRow) : null;
+}
