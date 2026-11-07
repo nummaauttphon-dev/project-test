@@ -87,7 +87,8 @@ function ReviewSection({ order }: { order: OrderDetail }) {
           </p>
           {pending ? (
             <>
-              <ApproveSlipButton orderId={order.id} status={order.status} slipId={pending.id} />
+              {/* Approving needs the slip in view; without its image (shown with a reload hint) only rejecting is offered. */}
+              {pending.url ? <ApproveSlipButton orderId={order.id} status={order.status} slipId={pending.id} /> : null}
               <RejectSlipForm orderId={order.id} status={order.status} slipId={pending.id} />
             </>
           ) : null}

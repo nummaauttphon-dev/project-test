@@ -45,7 +45,7 @@ type Override = {
   upload?: () => StorageResult;
   remove?: () => StorageResult;
   /** Return a result to replace the call, or null to let the real one run. */
-  rpc?: (fn: string) => RpcResult | null;
+  rpc?: (fn: string, args: unknown) => RpcResult | null;
 };
 
 const failSubmit = (fn: string): RpcResult | null =>
@@ -70,7 +70,7 @@ function patched(override: Override): SupabaseClient {
       }
       if (prop === "rpc" && override.rpc) {
         const realRpc = target.rpc.bind(target) as (...args: unknown[]) => unknown;
-        return (fn: string, args: unknown) => override.rpc?.(fn) ?? realRpc(fn, args);
+        return (fn: string, args: unknown) => override.rpc?.(fn, args) ?? realRpc(fn, args);
       }
       const value = Reflect.get(target, prop) as unknown;
       return typeof value === "function" ? value.bind(target) : value;
@@ -205,6 +205,36 @@ describe("submitSlip", () => {
     expect(await slipObjects(order.id)).toEqual([]);
     expect(await slipCount(order.id)).toBe(0);
   });
+
+  it.each([
+    [
+      "answers with an error",
+      () => Promise.resolve({ data: null, error: { code: "", message: "TypeError: fetch failed" } }),
+    ],
+    ["throws", () => Promise.reject(new Error("socket hang up"))],
+  ])(
+    "keeps the file when submit_payment_slip committed but the call %s",
+    async (_, lostResponse) => {
+      const { order, token } = await seedOrderWithToken();
+      vi.spyOn(console, "error").mockImplementation(() => undefined);
+      // The database commits, then the response is lost on the way back.
+      const committedThenLost = patched({
+        rpc: (fn, args) =>
+          fn === "submit_payment_slip"
+            ? (client.rpc(fn, args as Record<string, unknown>).then(lostResponse) as unknown as RpcResult)
+            : null,
+      });
+      const result = await submitSlip(token, png(), deps(committedThenLost));
+
+      // The committed row points at the file, so the file must still be there.
+      const { data: slips } = await client.from("payment_slips").select("storage_path").eq("order_id", order.id);
+      expect(slips).toHaveLength(1);
+      expect(await slipObjects(order.id)).toEqual([slips?.[0].storage_path]);
+      expect(await statusOf(order.id)).toBe("payment_review");
+      // The slip did go through, so the customer is told so rather than asked to send it again.
+      expect(result).toEqual({ ok: true, data: { status: "payment_review" } });
+    },
+  );
 
   it("a failure to delete the file keeps the customer message and logs only a code", async () => {
     const { order, token } = await seedOrderWithToken();

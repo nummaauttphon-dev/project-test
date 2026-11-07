@@ -38,9 +38,44 @@ async function removeQuietly(client: SupabaseClient, path: string): Promise<void
 }
 
 /**
+ * Whether a payment_slips row points at `path`, i.e. whether submit_payment_slip committed. null
+ * when the lookup itself fails, so nobody can tell.
+ */
+async function slipRecorded(client: SupabaseClient, path: string): Promise<boolean | null> {
+  try {
+    const { data, error } = await client.from("payment_slips").select("id").eq("storage_path", path).maybeSingle();
+    if (error) {
+      console.error("slip lookup failed", codeOf(error));
+      return null;
+    }
+    return data !== null;
+  } catch {
+    console.error("slip lookup threw");
+    return null;
+  }
+}
+
+/**
+ * The database call failed without a clear answer: it may have committed before the response was
+ * lost. The file is deleted only once a lookup shows no row points at it; a committed slip is the
+ * customer's success, and while unsure the file stays (an orphan is better than a slip without its
+ * image).
+ */
+async function settleUnclearSubmit(
+  client: SupabaseClient,
+  path: string,
+): Promise<ActionResult<{ status: "payment_review" }>> {
+  const recorded = await slipRecorded(client, path);
+  if (recorded === true) return ok({ status: "payment_review" });
+  if (recorded === false) await removeQuietly(client, path);
+  return refuse("UPLOAD_FAILED");
+}
+
+/**
  * Order of work: find the order, check status and expiry, rate limit per order, validate the file,
- * upload, then submit_payment_slip. If the database call fails, the new file is deleted again, so
- * a failed attempt leaves neither a status change nor an orphan in Storage.
+ * upload, then submit_payment_slip. If the database refuses, the new file is deleted again, so a
+ * failed attempt leaves neither a status change nor an orphan in Storage. If the call fails without
+ * a clear answer, see settleUnclearSubmit.
  */
 export async function submitSlip(
   token: string,
@@ -76,6 +111,7 @@ export async function submitSlip(
     return refuse("UPLOAD_FAILED");
   }
 
+  let result: { ok?: unknown; code?: unknown } | null;
   try {
     const { data, error } = await client.rpc("submit_payment_slip", {
       p_order_id: order.id,
@@ -83,20 +119,22 @@ export async function submitSlip(
     });
     if (error) {
       console.error("submit_payment_slip failed", codeOf(error));
-      await removeQuietly(client, path);
-      return refuse("UPLOAD_FAILED");
+      return await settleUnclearSubmit(client, path);
     }
-    const result = data as { ok?: unknown; code?: unknown } | null;
-    if (result?.ok === true) return ok({ status: "payment_review" });
-
-    await removeQuietly(client, path);
-    const code = result?.code;
-    if (code === "NOT_FOUND" || code === "EXPIRED" || code === "INVALID_STATUS") return refuse(code);
-    console.error("submit_payment_slip returned an unexpected shape");
-    return refuse("UPLOAD_FAILED");
+    result = data as { ok?: unknown; code?: unknown } | null;
   } catch {
     console.error("submit_payment_slip threw");
-    await removeQuietly(client, path);
-    return refuse("UPLOAD_FAILED");
+    return await settleUnclearSubmit(client, path);
   }
+
+  if (result?.ok === true) return ok({ status: "payment_review" });
+
+  // A definite refusal: the function returned without inserting anything.
+  const code = result?.code;
+  if (code === "NOT_FOUND" || code === "EXPIRED" || code === "INVALID_STATUS") {
+    await removeQuietly(client, path);
+    return refuse(code);
+  }
+  console.error("submit_payment_slip returned an unexpected shape");
+  return await settleUnclearSubmit(client, path);
 }

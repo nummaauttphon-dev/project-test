@@ -52,6 +52,15 @@ async function seedReview() {
   return { order, token };
 }
 
+/** The customer's resubmission: a real image, then submit_payment_slip as the order page calls it. */
+async function seedPendingSlipViaSubmit(orderId: string) {
+  const path = `${orderId}/second.png`;
+  const upload = await adminClient().storage.from("payment-slips").upload(path, png, { contentType: "image/png" });
+  expect(upload.error).toBeNull();
+  const { data } = await adminClient().rpc("submit_payment_slip", { p_order_id: orderId, p_storage_path: path });
+  expect(data).toEqual({ ok: true, status: "payment_review" });
+}
+
 function statusOf(page: Page) {
   return page.getByTestId("admin-order-status");
 }
@@ -89,6 +98,56 @@ test("without a pending slip, neither approve nor reject is offered", async ({ p
   await expect(review.getByRole("button", { name: "ยืนยันการชำระเงิน" })).toHaveCount(0);
   await expect(review.getByLabel("เหตุผลที่ปฏิเสธสลิป")).toHaveCount(0);
   await expect(review.getByRole("button", { name: "ปฏิเสธสลิป" })).toHaveCount(0);
+});
+
+test("a pending slip whose image cannot be opened offers reject but not approve", async ({ page }) => {
+  const { order } = await seedOrderWithToken({ status: "payment_review" });
+  // The row points at an object that is not in Storage, so no signed link can be made for it.
+  const { error } = await adminClient()
+    .from("payment_slips")
+    .insert({ order_id: order.id, storage_path: `${order.id}/missing.png` });
+  expect(error).toBeNull();
+
+  await page.goto(`/admin/orders/${order.id}`);
+  const review = page.getByRole("region", { name: "ตรวจสลิป" });
+  await expect(review).toContainText("เปิดรูปสลิปไม่ได้ในขณะนี้ กรุณาโหลดหน้าใหม่");
+  await expect(review.getByRole("img", { name: /สลิปการโอนเงิน/ })).toHaveCount(0);
+  await expect(review.getByRole("button", { name: "ยืนยันการชำระเงิน" })).toHaveCount(0);
+  await expect(review.getByRole("button", { name: "ปฏิเสธสลิป" })).toBeVisible();
+  await expect(review.getByLabel("เหตุผลที่ปฏิเสธสลิป")).toBeVisible();
+});
+
+test("approve and reject from a page that showed an older slip change nothing", async ({ page }) => {
+  const { order } = await seedReview();
+  await page.goto(`/admin/orders/${order.id}`);
+  const review = page.getByRole("region", { name: "ตรวจสลิป" });
+  await expect(review.getByRole("img", { name: /สลิปการโอนเงิน/ })).toBeVisible();
+
+  // Elsewhere: the shown slip is rejected and the customer sends a new one.
+  const rejected = await adminClient().rpc("transition_order", {
+    p_order_id: order.id,
+    p_to: "awaiting_payment",
+    p_actor: admin.id,
+    p_reason: "ยอดเงินไม่ตรง",
+  });
+  expect(rejected.data).toEqual({ ok: true, status: "awaiting_payment" });
+  await seedPendingSlipViaSubmit(order.id);
+
+  await review.getByRole("button", { name: "ยืนยันการชำระเงิน" }).click();
+  await expect(review.getByTestId("action-error").first()).toContainText("กรุณาโหลดหน้าใหม่");
+
+  await review.getByLabel("เหตุผลที่ปฏิเสธสลิป").fill("รูปสลิปเบลอ");
+  await review.getByRole("button", { name: "ปฏิเสธสลิป" }).click();
+  await expect(review.getByTestId("action-error").last()).toContainText("กรุณาโหลดหน้าใหม่");
+
+  expect((await orderRow(order.id)).status).toBe("payment_review");
+  expect(await slipsOf(order.id)).toEqual(
+    expect.arrayContaining([
+      { review_status: "rejected", reviewed_by: admin.id, reject_reason: "ยอดเงินไม่ตรง" },
+      { review_status: "pending", reviewed_by: null, reject_reason: null },
+    ]),
+  );
+  expect(await slipsOf(order.id)).toHaveLength(2);
 });
 
 test("rejecting requires a reason shown to the customer", async ({ page }) => {
