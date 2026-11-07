@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { assertLocal } from "./local-only";
 
 export type Product = {
   id: string;
@@ -27,9 +28,15 @@ export function required(name: string): string {
 
 const options = { auth: { persistSession: false, autoRefreshToken: false } };
 
+/**
+ * The secret-key client every destructive helper (resetData, deleteTestUsers, revokeAdmin, the
+ * seeders) goes through, so it refuses anything but the local stack.
+ */
 export function adminClient(): SupabaseClient {
+  const url = required("NEXT_PUBLIC_SUPABASE_URL");
+  assertLocal("NEXT_PUBLIC_SUPABASE_URL", url);
   return createClient(
-    required("NEXT_PUBLIC_SUPABASE_URL"),
+    url,
     required("SUPABASE_SECRET_KEY"),
     options,
   );
@@ -61,7 +68,10 @@ async function emptyBucket(bucket: string, prefix = ""): Promise<void> {
   }
 }
 
-/** Deletes test data in foreign-key order and clears both storage buckets. Keeps store_settings. */
+/**
+ * Deletes test data in foreign-key order and clears both storage buckets. Keeps store_settings.
+ * Refuses to run unless NEXT_PUBLIC_SUPABASE_URL is the local stack (through adminClient).
+ */
 export async function resetData(): Promise<void> {
   const db = adminClient();
   const nil = "00000000-0000-0000-0000-000000000000";

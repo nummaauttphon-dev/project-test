@@ -1,6 +1,9 @@
 import pg from "pg";
+import { assertLocal } from "./local-only";
 
+/** A direct database connection; tests use it for checks and changes the API cannot make. Local stack only. */
 export async function connect(): Promise<pg.Client> {
+  assertLocal("DATABASE_URL", process.env.DATABASE_URL);
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   return client;

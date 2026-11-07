@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import pg from "pg";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   adminClient,
@@ -10,6 +9,7 @@ import {
   seedProduct,
   seedProductRaw,
 } from "../helpers/supabase";
+import { connect } from "../helpers/pg";
 
 const png = readFileSync("tests/fixtures/real.png");
 
@@ -97,8 +97,7 @@ describe("RLS and storage", () => {
   );
 
   it("objects created later in public are closed to anon by default", async () => {
-    const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
-    await client.connect();
+    const client = await connect();
     try {
       await client.query("begin");
       await client.query("create table public.zz_future (id int)");
