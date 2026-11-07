@@ -149,8 +149,18 @@ test("loads a product image from Supabase storage and falls back when it is miss
     await expect(image).toBeVisible();
     await expect.poll(() => image.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0);
 
+    // Answer the optimizer request for the missing object the way the optimizer itself does (400,
+    // since Storage answers 400 for a missing object), so the server does not log the expected
+    // "upstream image response failed" error into the test output. The fallback still runs on a
+    // real failed <img> load in the browser.
+    let missingRequests = 0;
+    await page.route(/\/_next\/image\?url=.*none\.png/, async (route) => {
+      missingRequests++;
+      await route.fulfill({ status: 400, contentType: "text/plain", body: "upstream image response failed" });
+    });
     await page.goto(`/products/${brokenImage.slug}`);
     await expect(page.getByRole("img", { name: "ไม่มีรูปสินค้า" })).toBeVisible();
+    expect(missingRequests).toBeGreaterThan(0);
   } finally {
     await adminClient().storage.from("product-images").remove([path]);
   }

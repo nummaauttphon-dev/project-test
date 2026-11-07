@@ -41,7 +41,10 @@ export function ProductImage({
       alt={name}
       fill
       sizes={sizes}
-      priority={priority}
+      // `priority` is deprecated in Next.js 16; an above-the-fold image loads eagerly at high
+      // fetch priority instead (Lighthouse flagged the LCP image as missing fetchpriority=high).
+      loading={priority ? "eager" : undefined}
+      fetchPriority={priority ? "high" : undefined}
       onError={() => setFailed(true)}
       className="object-cover"
     />
