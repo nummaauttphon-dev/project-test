@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { queryError } from "@/lib/log";
 import { createServerSupabase } from "@/lib/supabase/server";
 
 /** Public product fields only. Never add columns here without checking they are safe to expose. */
@@ -26,7 +27,7 @@ export async function listProducts(client?: SupabaseClient): Promise<CatalogProd
     .select(LIST_COLUMNS)
     .order("created_at", { ascending: false })
     .order("id");
-  if (error) throw new Error(`listProducts: ${error.message}`);
+  if (error) throw queryError("listProducts", error);
   return (data ?? []) as CatalogProduct[];
 }
 
@@ -40,7 +41,7 @@ export async function getProductBySlug(
     .select(DETAIL_COLUMNS)
     .eq("slug", slug)
     .maybeSingle();
-  if (error) throw new Error(`getProductBySlug: ${error.message}`);
+  if (error) throw queryError("getProductBySlug", error);
   return (data as ProductDetail | null) ?? null;
 }
 
@@ -52,7 +53,7 @@ export async function getProductsByIds(
   if (ids.length === 0) return [];
   const db = client ?? (await createServerSupabase());
   const { data, error } = await db.from("products").select(LIST_COLUMNS).in("id", ids);
-  if (error) throw new Error(`getProductsByIds: ${error.message}`);
+  if (error) throw queryError("getProductsByIds", error);
   return (data ?? []) as CatalogProduct[];
 }
 
@@ -69,7 +70,8 @@ export async function getStoreSettings(client: SupabaseClient): Promise<StoreSet
     .select("shipping_fee_satang, payment_window_minutes, contact_url")
     .eq("id", 1)
     .single();
-  if (error || !data) throw new Error(`getStoreSettings: ${error?.message ?? "no row"}`);
+  if (error) throw queryError("getStoreSettings", error);
+  if (!data) throw new Error("getStoreSettings: no row");
   return {
     // bigint columns arrive as JSON numbers; satang amounts stay far below 2^53.
     shippingFeeSatang: Number(data.shipping_fee_satang),

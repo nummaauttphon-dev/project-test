@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { getProductsByIds, getStoreSettings, type CatalogProduct } from "@/features/catalog/queries";
+import { codeOf, loggable } from "@/lib/log";
 import { fail, ok, type ActionResult } from "@/lib/result";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { MAX_CART_LINES, MAX_LINE_QUANTITY, type CartLine } from "./cart-storage";
@@ -33,7 +34,9 @@ export async function getCartViewAction(lines: CartLine[]): Promise<ActionResult
     ]);
     return ok({ products, shippingFeeSatang: settings.shippingFeeSatang });
   } catch (error) {
-    console.error("getCartViewAction failed", error instanceof Error ? error.message : "unknown");
+    // Only a code: error messages can carry query values.
+    const code = codeOf(error);
+    console.error("getCartViewAction failed", code === "unknown" ? code : loggable(code));
     return fail("cart_unavailable", "โหลดตะกร้าไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
   }
 }
