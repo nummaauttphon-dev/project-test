@@ -1,8 +1,8 @@
 # สถานะโปรเจกต์: เว็บร้านค้าทดสอบไอเดีย
 
 - **อัปเดตล่าสุด:** 2026-11-09
-- **Branch งาน:** `feat/web-store` ยังไม่ได้ push และยังไม่ได้ merge เข้า `main`
-- **Commit ล่าสุดที่ผ่านการตรวจ:** `04b8306`
+- **Branch:** งานทั้งหมด merge เข้า `main` แล้ว และลบ branch `feat/web-store` แล้ว ยังไม่ได้ push เพราะ repository ยังไม่มี remote
+- **Commit ล่าสุดที่ผ่านการตรวจ:** `04b8306` และผ่าน test ทั้งชุดซ้ำที่ `fb7564f` บน `main`
 - **เอกสารหลัก:** [spec](docs/superpowers/specs/2026-11-06-web-store-design.md), [แผนงาน](docs/superpowers/plans/2026-11-06-web-store.md) และ [README](README.md)
 
 ## เป้าหมาย
@@ -22,7 +22,7 @@
 | ตรวจรวมทั้ง branch | ตรวจครั้งสุดท้ายและแก้ตามผลตรวจ 1 รอบ | เสร็จ เหลือปัญหาย่อยในเอกสาร 1 จุด |
 | 15 | Deploy | **ยังไม่เริ่ม และต้องได้รับอนุมัติจากเจ้าของทีละขั้น** |
 
-**ผล test ล่าสุดที่ `04b8306` ตามรายงานของ implementer:** unit 228, integration 321 และ E2E 107 ผ่านทั้งหมด ส่วน `tsc` และ lint ไม่มี error ผู้ตรวจรวมรัน unit, integration, `tsc` และ lint ซ้ำเองแล้วผ่านที่ `b388cba` ก่อนการแก้รอบสุดท้าย
+**ผล test ล่าสุด:** controller รันเองที่ `fb7564f` หลัง reset ฐานข้อมูล ได้ผล unit 228, integration 321 และ E2E 107 ผ่านทั้งหมด ส่วน `tsc` และ lint ไม่มี error
 
 **การ build:** `npm run build` ต้องมี environment variable ของ server ครบ เพราะ Next.js อ่านค่าเหล่านี้ตอน prerender หน้า `/admin/login` จึงต้องตั้งค่าใน Vercel ทั้ง Preview และ Production
 
@@ -169,6 +169,6 @@ npm run test:e2e
 ## การกลับมาทำงานต่อ
 
 1. Ledger อยู่ที่ `.superpowers/sdd/2026-11-06-web-store/progress.md` และไม่อยู่ใน Git จึงห้ามรัน `git clean -fdx`
-2. รัน `git status` และ `git log --oneline main..HEAD`
-3. ตัดสินใจเรื่อง merge `feat/web-store` เข้า `main`
+2. รัน `git status` และ `git log --oneline -5`
+3. แก้ README บรรทัด 83 ตามหัวข้อ "ต้องจัดการก่อนเปิดร้าน"
 4. Task 15 ต้องได้รับอนุมัติเฉพาะแต่ละขั้น ห้าม push, deploy, รัน migration บนโปรเจกต์จริง หรือสมัครบริการเสียเงินถ้ายังไม่ได้รับอนุญาตจากเจ้าของในขั้นนั้น
