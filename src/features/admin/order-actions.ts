@@ -1,10 +1,12 @@
 "use server";
 
 import { refresh } from "next/cache";
+import { loggable } from "@/lib/log";
+import { isOrderStatus } from "@/lib/order-status";
 import { fail, ok, type ActionResult } from "@/lib/result";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isUuid } from "@/lib/uuid";
 import { requireAdmin } from "./auth";
-import { isOrderId, isOrderStatus } from "./queries";
 
 /**
  * Admin order actions. Each one's first statement is requireAdmin(), before any argument is read:
@@ -55,11 +57,6 @@ const KNOWN_CODES: readonly string[] = [
 
 const MAX_REASON = 500;
 const MAX_TRACKING = 100;
-
-/** Only a short, code-shaped value is logged; anything else could carry customer data. */
-function loggable(code: unknown): string {
-  return typeof code === "string" && /^[A-Z0-9_]{1,40}$/.test(code) ? code : "unexpected";
-}
 
 function length(text: string): number {
   return [...text].length;
@@ -122,8 +119,8 @@ export async function approveSlipAction(
 ): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
-  if (!isOrderId(orderId)) return notFound();
-  if (!isOrderStatus(expectedStatus) || !isOrderId(expectedSlipId)) return statusChanged();
+  if (!isUuid(orderId)) return notFound();
+  if (!isOrderStatus(expectedStatus) || !isUuid(expectedSlipId)) return statusChanged();
   return callDatabase("transition_order", {
     p_order_id: orderId,
     p_to: "paid",
@@ -142,8 +139,8 @@ export async function rejectSlipAction(
 ): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
-  if (!isOrderId(orderId)) return notFound();
-  if (!isOrderStatus(expectedStatus) || !isOrderId(expectedSlipId)) return statusChanged();
+  if (!isUuid(orderId)) return notFound();
+  if (!isOrderStatus(expectedStatus) || !isUuid(expectedSlipId)) return statusChanged();
   const normalized = normalizeReason(reason);
   if (!normalized) return fail("INVALID_REASON", MESSAGES.INVALID_REASON, { reason: MESSAGES.INVALID_REASON });
   return callDatabase("transition_order", {
@@ -163,7 +160,7 @@ export async function shipOrderAction(
 ): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
-  if (!isOrderId(orderId)) return notFound();
+  if (!isUuid(orderId)) return notFound();
   if (!isOrderStatus(expectedStatus)) return statusChanged();
   const normalized = normalizeTracking(tracking);
   if (!normalized) {
@@ -188,7 +185,7 @@ export async function cancelOrderAction(
 ): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
-  if (!isOrderId(orderId)) return notFound();
+  if (!isUuid(orderId)) return notFound();
   if (!isOrderStatus(expectedStatus)) return statusChanged();
   return callDatabase("transition_order", {
     p_order_id: orderId,
@@ -201,7 +198,7 @@ export async function cancelOrderAction(
 export async function setTrackingAction(orderId: string, tracking: string): Promise<ActionResult<{ status: Status }>> {
   const admin = await requireAdmin();
   if (!admin.ok) return admin;
-  if (!isOrderId(orderId)) return notFound();
+  if (!isUuid(orderId)) return notFound();
   const normalized = normalizeTracking(tracking);
   if (!normalized) {
     return fail("INVALID_TRACKING", MESSAGES.INVALID_TRACKING, { tracking: MESSAGES.INVALID_TRACKING });

@@ -1,5 +1,5 @@
 import { ADMIN_STATUS_LABELS } from "@/features/admin/format";
-import type { OrderStatus } from "@/features/orders/queries";
+import type { OrderStatus } from "@/lib/order-status";
 
 const TONES: Record<OrderStatus, string> = {
   awaiting_payment: "border-line-strong bg-surface text-ink",

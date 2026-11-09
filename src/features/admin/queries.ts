@@ -1,15 +1,7 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { OrderStatus } from "@/features/orders/queries";
-
-export const ORDER_STATUSES: readonly OrderStatus[] = [
-  "awaiting_payment",
-  "payment_review",
-  "paid",
-  "shipped",
-  "expired",
-  "cancelled",
-];
+import { isOrderStatus, type OrderStatus } from "@/lib/order-status";
+import { isUuid } from "@/lib/uuid";
 
 export const ORDERS_PAGE_SIZE = 50;
 export const LOW_STOCK_THRESHOLD = 5;
@@ -17,16 +9,6 @@ const LOW_STOCK_LIMIT = 50;
 /** Signed slip links live this long: enough to look at the slip, short if a link leaks. */
 export const SLIP_URL_SECONDS = 300;
 const SLIP_BUCKET = "payment-slips";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export function isOrderId(value: unknown): value is string {
-  return typeof value === "string" && UUID.test(value);
-}
-
-export function isOrderStatus(value: unknown): value is OrderStatus {
-  return typeof value === "string" && (ORDER_STATUSES as readonly string[]).includes(value);
-}
 
 export type LowStockProduct = { id: string; name: string; stockQuantity: number };
 
@@ -246,7 +228,7 @@ function reviewStatus(value: unknown): SlipView["reviewStatus"] {
 
 /** Call only after requireAdminPage: it creates signed links to the order's slips. */
 export async function getOrderDetail(client: SupabaseClient, id: string): Promise<OrderDetail | null> {
-  if (!isOrderId(id)) return null;
+  if (!isUuid(id)) return null;
   const { data: order, error } = await client
     .from("orders")
     .select(
@@ -356,7 +338,7 @@ export async function listAdminProducts(client: SupabaseClient): Promise<AdminPr
 }
 
 export async function getAdminProduct(client: SupabaseClient, id: string): Promise<AdminProduct | null> {
-  if (!isOrderId(id)) return null;
+  if (!isUuid(id)) return null;
   const { data, error } = await client.from("products").select(PRODUCT_COLUMNS).eq("id", id).maybeSingle();
   if (error) throw failure("getAdminProduct", error);
   return data ? toAdminProduct(data as ProductRow) : null;

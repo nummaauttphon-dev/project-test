@@ -3,23 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getStoreSettings } from "@/features/catalog/queries";
 import { maskAddress, maskName } from "@/lib/mask";
 import { hashOrderToken } from "@/lib/order-token";
-
-export type OrderStatus =
-  | "awaiting_payment"
-  | "payment_review"
-  | "paid"
-  | "shipped"
-  | "expired"
-  | "cancelled";
-
-const STATUSES: readonly string[] = [
-  "awaiting_payment",
-  "payment_review",
-  "paid",
-  "shipped",
-  "expired",
-  "cancelled",
-];
+import { isOrderStatus, type OrderStatus } from "@/lib/order-status";
 
 /**
  * Everything the order page may show. It holds no phone, no full name or address, no ids and no
@@ -43,10 +27,6 @@ export type OrderView = {
   /** An http(s) link, or null. */
   contactUrl: string | null;
 };
-
-function isStatus(value: unknown): value is OrderStatus {
-  return typeof value === "string" && STATUSES.includes(value);
-}
 
 /** Only http and https may become links; javascript:, data: and the like never reach an href. */
 export function safeContactUrl(value: string): string | null {
@@ -75,7 +55,7 @@ export async function findOrderByToken(client: SupabaseClient, token: string): P
     .eq("token_hash", hashOrderToken(token))
     .maybeSingle();
   if (error) throw new Error(`findOrderByToken: ${error.code ?? "unknown"}`);
-  if (!data || !isStatus(data.status)) return null;
+  if (!data || !isOrderStatus(data.status)) return null;
   return { id: String(data.id), status: data.status, expiresAt: new Date(String(data.expires_at)).toISOString() };
 }
 
@@ -98,7 +78,7 @@ export async function getOrderViewByToken(
     .eq("token_hash", hashOrderToken(token))
     .maybeSingle();
   if (error) throw new Error(`getOrderViewByToken: ${error.code ?? "unknown"}`);
-  if (!order || !isStatus(order.status)) return null;
+  if (!order || !isOrderStatus(order.status)) return null;
 
   const expiresAt = new Date(String(order.expires_at)).toISOString();
   const status = presentStatus(order.status, expiresAt, now);

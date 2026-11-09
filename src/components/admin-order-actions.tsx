@@ -8,7 +8,7 @@ import {
   setTrackingAction,
   shipOrderAction,
 } from "@/features/admin/order-actions";
-import type { OrderStatus } from "@/features/orders/queries";
+import type { OrderStatus } from "@/lib/order-status";
 import { ActionError, DANGER, FIELD, FieldError, PRIMARY, SECONDARY, useAdminAction } from "./admin-ui";
 
 /**

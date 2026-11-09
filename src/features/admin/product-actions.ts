@@ -2,11 +2,13 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { validateSlipFile, type SlipValidation } from "@/lib/slip-file";
+import { loggable } from "@/lib/log";
 import { fail, ok, type ActionResult } from "@/lib/result";
+import { validateSlipFile, type SlipValidation } from "@/lib/slip-file";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isUuid } from "@/lib/uuid";
 import { requireAdmin } from "./auth";
-import { FIELD_MESSAGES, isUuid, validateProductInput } from "./validation";
+import { FIELD_MESSAGES, validateProductInput } from "./validation";
 
 /**
  * Admin product actions. Each one's first statement is requireAdmin(), before any argument is
@@ -46,11 +48,6 @@ export type ProductInput = {
   /** Opening stock of a new product, as typed. Ignored when editing: stock has its own action. */
   stock?: string;
 };
-
-/** Only a short, code-shaped value is logged; anything else could carry data. */
-function loggable(code: unknown): string {
-  return typeof code === "string" && /^[A-Z0-9_]{1,40}$/.test(code) ? code : "unexpected";
-}
 
 /** Product changes show in the store at once, and in the admin lists. */
 function revalidateProducts(): void {

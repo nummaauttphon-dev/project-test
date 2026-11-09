@@ -1,6 +1,5 @@
 import { fileTypeFromBuffer } from "file-type";
-
-export const MAX_SLIP_BYTES = 4_194_304;
+import { MAX_IMAGE_BYTES } from "./upload-limits";
 
 const ALLOWED = {
   "image/jpeg": "jpg",
@@ -21,12 +20,12 @@ function isAllowed(mime: string): mime is SlipMime {
 
 /** Validates by file contents only; file.type and file.name are never trusted. */
 export async function validateSlipFile(file: File): Promise<SlipValidation> {
-  if (file.size > MAX_SLIP_BYTES) return { ok: false, code: "TOO_LARGE" };
+  if (file.size > MAX_IMAGE_BYTES) return { ok: false, code: "TOO_LARGE" };
   if (file.size === 0) return { ok: false, code: "EMPTY" };
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (bytes.byteLength === 0) return { ok: false, code: "EMPTY" };
-  if (bytes.byteLength > MAX_SLIP_BYTES) return { ok: false, code: "TOO_LARGE" };
+  if (bytes.byteLength > MAX_IMAGE_BYTES) return { ok: false, code: "TOO_LARGE" };
 
   const detected = await fileTypeFromBuffer(bytes);
   if (!detected) return { ok: false, code: "UNSUPPORTED_TYPE" };

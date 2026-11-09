@@ -1,4 +1,4 @@
-import type { OrderStatus } from "@/features/orders/queries";
+import type { OrderStatus } from "@/lib/order-status";
 
 /** Status names on admin screens: short, for scanning a list. */
 export const ADMIN_STATUS_LABELS: Record<OrderStatus, string> = {

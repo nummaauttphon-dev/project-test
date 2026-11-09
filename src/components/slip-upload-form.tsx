@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { submitSlipAction } from "@/features/orders/actions";
 import { SLIP_MESSAGES } from "@/features/orders/slip-messages";
+import { MAX_IMAGE_BYTES } from "@/lib/upload-limits";
 
-const MAX_BYTES = 4_194_304;
 const REFRESH_CODES = new Set(["EXPIRED", "INVALID_STATUS", "NOT_FOUND"]);
 
 export function SlipUploadForm({ token }: { token: string }) {
@@ -25,7 +25,7 @@ export function SlipUploadForm({ token }: { token: string }) {
     event.preventDefault();
     if (!file || submittingRef.current) return;
     // A quick answer for the common mistake; the server checks the real size again.
-    if (file.size > MAX_BYTES) {
+    if (file.size > MAX_IMAGE_BYTES) {
       setError(SLIP_MESSAGES.TOO_LARGE);
       return;
     }

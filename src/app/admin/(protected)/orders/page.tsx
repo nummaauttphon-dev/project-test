@@ -3,9 +3,9 @@ import Link from "next/link";
 import { AdminStatusBadge } from "@/components/admin-status-badge";
 import { requireAdminPage } from "@/features/admin/auth";
 import { ADMIN_STATUS_LABELS, formatThaiDateTime } from "@/features/admin/format";
-import { isOrderStatus, listOrders, ORDER_STATUSES } from "@/features/admin/queries";
-import type { OrderStatus } from "@/features/orders/queries";
+import { listOrders } from "@/features/admin/queries";
 import { formatBaht } from "@/lib/money";
+import { isOrderStatus, ORDER_STATUSES, type OrderStatus } from "@/lib/order-status";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const metadata: Metadata = { title: "คำสั่งซื้อ" };

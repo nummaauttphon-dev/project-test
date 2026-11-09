@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useId, useRef, useState, type FormEvent } from "react";
 import { saveProductAction } from "@/features/admin/product-actions";
 import { MAX_DESCRIPTION, MAX_NAME, MAX_SLUG } from "@/features/admin/validation";
+import { MAX_IMAGE_BYTES } from "@/lib/upload-limits";
 import { ProductImage } from "./product-image";
 import { ActionError, FIELD, FormField, PRIMARY, SECONDARY, useAdminAction } from "./admin-ui";
 
-const MAX_IMAGE_BYTES = 4_194_304;
 const IMAGE_TOO_LARGE = "รูปใหญ่เกิน 4 MB กรุณาเลือกรูปที่เล็กลง";
 
 export type ProductFormValues = {

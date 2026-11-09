@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { codeOf } from "@/lib/log";
 import { isAllowed } from "@/lib/rate-limit";
 import { fail, ok, type ActionResult } from "@/lib/result";
 import { validateSlipFile } from "@/lib/slip-file";
@@ -16,16 +17,6 @@ const BUCKET = "payment-slips";
 
 function refuse(code: SlipFailureCode): ActionResult<never> {
   return fail(code, SLIP_MESSAGES[code]);
-}
-
-/** A code that is safe to log. Error messages can carry storage paths, so they are never logged. */
-function codeOf(error: unknown): string {
-  if (typeof error === "object" && error !== null) {
-    const e = error as { code?: unknown; statusCode?: unknown };
-    if (typeof e.code === "string") return e.code;
-    if (typeof e.statusCode === "string" || typeof e.statusCode === "number") return String(e.statusCode);
-  }
-  return "unknown";
 }
 
 async function removeQuietly(client: SupabaseClient, path: string): Promise<void> {

@@ -1,5 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { codeOf } from "@/lib/log";
 
 const BUCKET = "payment-slips";
 const RETENTION_DAYS = 90;
@@ -8,16 +9,6 @@ const MAX_BATCHES = 10;
 const TERMINAL_STATUSES = ["shipped", "cancelled", "expired"];
 
 type SlipRow = { id: string; path: string };
-
-/** A code that is safe to log. Error messages can carry storage paths, so they are never logged. */
-function codeOf(error: unknown): string {
-  if (typeof error === "object" && error !== null) {
-    const e = error as { code?: unknown; statusCode?: unknown };
-    if (typeof e.code === "string") return e.code;
-    if (typeof e.statusCode === "string" || typeof e.statusCode === "number") return String(e.statusCode);
-  }
-  return "unknown";
-}
 
 async function removeObjects(client: SupabaseClient, paths: string[]): Promise<boolean> {
   try {

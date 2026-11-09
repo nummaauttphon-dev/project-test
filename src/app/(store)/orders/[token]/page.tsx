@@ -6,9 +6,10 @@ import { CopyLinkButton } from "@/components/copy-link-button";
 import { OrderCountdown } from "@/components/order-countdown";
 import { RefreshButton } from "@/components/refresh-button";
 import { SlipUploadForm } from "@/components/slip-upload-form";
-import { getOrderViewByToken, type OrderStatus, type OrderView } from "@/features/orders/queries";
+import { getOrderViewByToken, type OrderView } from "@/features/orders/queries";
 import { serverEnv } from "@/lib/env";
 import { formatBaht } from "@/lib/money";
+import type { OrderStatus } from "@/lib/order-status";
 import { createPromptPayPayload, renderQrDataUrl } from "@/lib/promptpay";
 import { createAdminClient } from "@/lib/supabase/admin";
 
