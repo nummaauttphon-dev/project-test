@@ -94,7 +94,7 @@ npx playwright test tests/e2e/a11y.spec.ts   # รันเฉพาะไฟล
 2. **(อนุมัติ)** สร้างโปรเจกต์ Supabase สองชุด: preview และ production
 3. ตั้งค่าใน Supabase Dashboard ของแต่ละโปรเจกต์: ปิด "Allow new users to sign up", เปิด MFA แบบ TOTP, ตั้งความยาวรหัสผ่านขั้นต่ำให้สูงกว่าค่าในเครื่อง และตรวจว่า extension `pg_cron` เปิดใช้ได้
 4. **(อนุมัติ)** รัน migration: `npx supabase link --project-ref <ref>` แล้ว `npx supabase db push` (ห้ามใส่ `supabase/seed.sql` ลง production เพราะเป็นสินค้าตัวอย่าง)
-5. **(อนุมัติ)** สร้างโปรเจกต์ Vercel เชื่อมกับ repository แล้วใส่ environment variables ตามตารางด้านบนแยกตาม Preview และ Production รวมถึง `CRON_SECRET`
+5. **(อนุมัติ)** สร้างโปรเจกต์ Vercel เชื่อมกับ repository แล้วใส่ environment variables ตามตารางด้านบนแยกตาม Preview และ Production รวมถึง `CRON_SECRET` ที่สุ่มยาวอย่างน้อย 16 ตัวอักษร และตรวจในเอกสาร Vercel ว่า `crons` ใน `vercel.json` ยังใช้ได้กับแพ็กเกจที่เลือก เพราะ Vercel กำลังเปลี่ยนไปใช้ Schedules ห้ามตั้งงานเดียวกันทั้งสองแบบ เพราะจะรันซ้ำ
 6. Deploy Preview แล้วทดสอบตั้งแต่สั่งซื้อจนจัดส่งกับโปรเจกต์ Supabase ของ preview บนมือถือจริง (iOS, Android และเบราว์เซอร์ในแอป LINE/Facebook) รวมถึงการบันทึกรูป QR และเลือกสลิปจากแกลเลอรี
 7. **(อนุมัติ)** สร้างแอดมินบน production ด้วย `scripts/create-admin.mjs` โดยใช้ env ของ production ในเครื่องของเจ้าของ แล้ว deploy Production
 8. ลองสั่งซื้อจริงบน production ด้วยออเดอร์ทดสอบ ตรวจ log ว่าไม่มี token ที่อยู่ หรือเบอร์โทร แล้วลบข้อมูลทดสอบเมื่อได้รับอนุญาต
@@ -103,7 +103,9 @@ npx playwright test tests/e2e/a11y.spec.ts   # รันเฉพาะไฟล
 
 - **ถอดสิทธิ์แอดมิน:** ลบแถวของผู้ใช้นั้นในตาราง `admins` และถ้าต้องการให้ login ไม่ได้อีก ให้ ban ผู้ใช้ใน Supabase Auth ห้ามลบผู้ใช้ใน Auth เพราะ `payment_slips.reviewed_by` อ้างอิงผู้ใช้แบบ `ON DELETE RESTRICT` การลบจะล้มเหลวหรือทำให้ประวัติการตรวจสลิปขาด
 - **การลบไฟล์สลิป:** ระบบลบไฟล์สลิปออกจาก Storage อัตโนมัติ 90 วันหลังออเดอร์เป็น `shipped`, `cancelled` หรือ `expired` โดยเก็บแถว `payment_slips` ไว้พร้อม `file_deleted_at` งานนี้รันผ่าน Vercel Cron วันละครั้ง (`vercel.json`, 02:00 น. เวลาไทย) ที่ `/api/cron/purge-slips`
-- **Vercel Cron ต้องมี `CRON_SECRET`:** ต้องตั้ง `CRON_SECRET` ในโปรเจกต์ Vercel เพราะ Vercel ส่ง header `Authorization` ให้ cron เฉพาะเมื่อมีตัวแปรนี้ ถ้าไม่มีหรือค่าไม่ตรง endpoint จะตอบ 401 และไฟล์สลิปจะไม่ถูกลบ แอปไม่ได้ตรวจตัวแปรตอนเริ่มทำงาน แต่อ่านและตรวจ environment variables ฝั่ง server ครั้งแรกที่มีการใช้งาน ดังนั้นการตั้งค่าผิดจะเห็นตอนเรียก endpoint หรือหน้าที่ใช้ตัวแปรเหล่านั้น ไม่ใช่ตอน deploy
+- **Vercel Cron ต้องมี `CRON_SECRET`:** ต้องตั้ง `CRON_SECRET` ในโปรเจกต์ Vercel เพราะ Vercel ส่ง header `Authorization` ให้ cron เฉพาะเมื่อมีตัวแปรนี้ ถ้าค่าไม่ตรง endpoint จะตอบ 401 และไฟล์สลิปจะไม่ถูกลบ
+- **ตัวแปร server ที่หายไปทำให้ deploy ล้มเหลว:** `next build` อ่าน environment variables ฝั่ง server ตอน prerender หน้า `/admin/login` ถ้าตัวแปรใดใน `.env.example` ที่แอปต้องใช้หายไป build จะหยุดด้วยข้อความ `Invalid server environment` จึงต้องตั้งให้ครบทั้ง Preview และ Production ส่วน `CRON_SECRET` ที่มีค่าแต่ไม่ตรงกันจะไม่ทำให้ build ล้มเหลว แต่จะเห็นเป็น 401 ตอน cron เรียก
+- **เปลี่ยน `CRON_SECRET` แล้วต้อง redeploy:** แต่ละ deployment ใช้ค่าที่มีตอน build ถ้าแก้ค่าใน Vercel แล้วไม่ redeploy ระบบจะยังใช้ค่าเดิม
 - **ออเดอร์หมดอายุ:** `pg_cron` ใน Supabase เรียก `expire_orders` ทุก 5 นาที และล้างตาราง `rate_limits` วันละครั้ง หน้าออเดอร์และการแนบสลิปตรวจเวลาหมดอายุเองด้วย
 - **การตรวจสลิป:** เทียบยอดกับแอปธนาคารทุกครั้งก่อนกดยืนยัน รูปสลิปอย่างเดียวปลอมได้
 - **ลิงก์ออเดอร์:** เป็นทางเดียวที่ลูกค้าดูสถานะได้ ระบบเก็บเฉพาะ hash ของ token จึงสร้างลิงก์เดิมคืนให้ไม่ได้ ถ้าลูกค้าทำลิงก์หาย ให้คุยกับลูกค้าด้วยเลขคำสั่งซื้อและดูสถานะจากหน้าแอดมินแทน

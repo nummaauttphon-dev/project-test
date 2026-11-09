@@ -136,8 +136,8 @@ npm run test:e2e
 
 ### ต้องจัดการก่อนเปิดร้าน (Task 15)
 
-- **README บรรทัด 83:** เขียนว่าปัญหา environment จะเห็น "ไม่ใช่ตอน deploy" แต่ถ้าตัวแปร server ใดหายไป `next build` จะล้มเหลว ส่วน `CRON_SECRET` ที่ไม่ตรงกันจะเห็นเป็น 401 ตอน cron เรียก ควรแก้ README ก่อน deploy
-- **ตัวแปรใน Vercel:** ตั้งค่าตัวแปร server ทั้ง 7 ตัวให้ทั้ง Preview และ Production
+- **ตัวแปรใน Vercel:** ตั้งค่าตัวแปร server ทั้ง 7 ตัวให้ทั้ง Preview และ Production และถ้าเปลี่ยน `CRON_SECRET` ต้อง redeploy
+- **Cron ของ Vercel:** Vercel กำลังเปลี่ยนจาก Cron Jobs ไปเป็น Schedules ต้องเช็กตอน deploy ว่า `crons` ใน `vercel.json` ยังใช้ได้
 - **ทดสอบบนมือถือจริง:**
   - การเลือกรูปสลิปและการบันทึก QR บน iOS, Android และเบราว์เซอร์ในแอป LINE กับ Facebook
   - สแกน QR ด้วยแอปธนาคารจริง เพื่อยืนยันบัญชีและยอดเงิน
@@ -170,5 +170,4 @@ npm run test:e2e
 
 1. Ledger อยู่ที่ `.superpowers/sdd/2026-11-06-web-store/progress.md` และไม่อยู่ใน Git จึงห้ามรัน `git clean -fdx`
 2. รัน `git status` และ `git log --oneline -5`
-3. แก้ README บรรทัด 83 ตามหัวข้อ "ต้องจัดการก่อนเปิดร้าน"
-4. Task 15 ต้องได้รับอนุมัติเฉพาะแต่ละขั้น ห้าม push, deploy, รัน migration บนโปรเจกต์จริง หรือสมัครบริการเสียเงินถ้ายังไม่ได้รับอนุญาตจากเจ้าของในขั้นนั้น
+3. Task 15 ต้องได้รับอนุมัติเฉพาะแต่ละขั้น ห้าม push, deploy, รัน migration บนโปรเจกต์จริง หรือสมัครบริการเสียเงินถ้ายังไม่ได้รับอนุญาตจากเจ้าของในขั้นนั้น
