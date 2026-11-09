@@ -1,7 +1,7 @@
 # สถานะโปรเจกต์: เว็บร้านค้าทดสอบไอเดีย
 
 - **อัปเดตล่าสุด:** 2026-11-09
-- **Branch:** งานทั้งหมด merge เข้า `main` แล้ว และลบ branch `feat/web-store` แล้ว ยังไม่ได้ push เพราะ repository ยังไม่มี remote
+- **Branch:** งานทั้งหมดอยู่บน `main` และ push ขึ้น GitHub แล้วที่ [nummaauttphon-dev/project-test](https://github.com/nummaauttphon-dev/project-test) โดยรวม commit แรกที่ GitHub สร้างไว้ด้วย merge commit
 - **Commit ล่าสุดที่ผ่านการตรวจ:** `04b8306` และผ่าน test ทั้งชุดซ้ำที่ `fb7564f` บน `main`
 - **เอกสารหลัก:** [spec](docs/superpowers/specs/2026-11-06-web-store-design.md), [แผนงาน](docs/superpowers/plans/2026-11-06-web-store.md) และ [README](README.md)
 
