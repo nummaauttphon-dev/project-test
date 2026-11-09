@@ -30,11 +30,6 @@ export async function lookupAdmin(client: SupabaseClient, userId: string): Promi
   }
 }
 
-/** A failed lookup counts as not admin, never as allowed. */
-export async function isAdminUser(client: SupabaseClient, userId: string): Promise<boolean> {
-  return (await lookupAdmin(client, userId)) === "admin";
-}
-
 export async function getAdminContext(): Promise<{ state: AdminState; userId?: string }> {
   // Outside the try: cookies() signals dynamic rendering by throwing, which must reach Next.js.
   const supabase = await createServerSupabase();

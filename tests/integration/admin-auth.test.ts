@@ -5,7 +5,7 @@ import * as OTPAuth from "otpauth";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { GET as notAdminRoute } from "@/app/admin/not-admin/route";
 import { loginAction } from "@/features/admin/actions";
-import { getAdminContext, isAdminUser, lookupAdmin, requireAdmin } from "@/features/admin/auth";
+import { getAdminContext, lookupAdmin, requireAdmin } from "@/features/admin/auth";
 import { updateSession } from "@/lib/supabase/proxy";
 import { createServerSupabase } from "@/lib/supabase/server";
 import {
@@ -104,41 +104,6 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("isAdminUser", () => {
-  it("isAdminUser is true only for rows in admins", async () => {
-    const admin = await createAdminUser();
-    const other = await createNonAdminUser();
-    expect(await isAdminUser(adminClient(), admin.id)).toBe(true);
-    expect(await isAdminUser(adminClient(), other.id)).toBe(false);
-    await revokeAdmin(admin);
-    expect(await isAdminUser(adminClient(), admin.id)).toBe(false);
-  });
-
-  it("treats a failed lookup as not admin", async () => {
-    const admin = await createAdminUser();
-    const options = { auth: { persistSession: false, autoRefreshToken: false } };
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
-
-    // Nothing listens on this port, so the request itself fails.
-    const unreachable = createClient("http://127.0.0.1:1", required("SUPABASE_SECRET_KEY"), options);
-    expect(await isAdminUser(unreachable, admin.id)).toBe(false);
-
-    // The publishable key has no access to the table.
-    const denied = createClient(
-      required("NEXT_PUBLIC_SUPABASE_URL"),
-      required("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
-      options,
-    );
-    expect(await isAdminUser(denied, admin.id)).toBe(false);
-
-    // A malformed id makes PostgREST answer with an error.
-    expect(await isAdminUser(adminClient(), "not-a-uuid")).toBe(false);
-
-    expect(consoleError.mock.calls.flat().join(" ")).not.toContain(admin.id);
-    consoleError.mockRestore();
-  });
-});
-
 describe("lookupAdmin", () => {
   it("tells a failed lookup apart from a user who is not an admin", async () => {
     const admin = await createAdminUser();
@@ -150,6 +115,26 @@ describe("lookupAdmin", () => {
     expect(await lookupAdmin(unreachableClient(), admin.id)).toBe("error");
     expect(await lookupAdmin(adminClient(), "not-a-uuid")).toBe("error");
 
+    expect(consoleError.mock.calls.flat().join(" ")).not.toContain(admin.id);
+    consoleError.mockRestore();
+  });
+
+  it("is admin only while the user has a row in admins", async () => {
+    const admin = await createAdminUser();
+    expect(await lookupAdmin(adminClient(), admin.id)).toBe("admin");
+    await revokeAdmin(admin);
+    expect(await lookupAdmin(adminClient(), admin.id)).toBe("not_admin");
+  });
+
+  it("never answers admin through a key without access to admins", async () => {
+    const admin = await createAdminUser();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const denied = createClient(
+      required("NEXT_PUBLIC_SUPABASE_URL"),
+      required("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"),
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+    expect(await lookupAdmin(denied, admin.id)).toBe("error");
     expect(consoleError.mock.calls.flat().join(" ")).not.toContain(admin.id);
     consoleError.mockRestore();
   });
