@@ -9,7 +9,7 @@ function Placeholder() {
     <div
       role="img"
       aria-label="ไม่มีรูปสินค้า"
-      className="flex h-full w-full items-center justify-center bg-sunken text-line-strong"
+      className="flex h-full w-full items-center justify-center bg-sunken text-ink-soft"
     >
       <svg viewBox="0 0 24 24" className="h-1/3 w-1/3" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
         <rect x="3" y="4" width="18" height="16" rx="2" />
