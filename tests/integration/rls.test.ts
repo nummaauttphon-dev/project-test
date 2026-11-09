@@ -157,6 +157,41 @@ describe("RLS and storage", () => {
     expect(listAfter.data?.map((f) => f.name)).toEqual(["a.png"]);
   });
 
+  it("anon cannot remove, move, overwrite or sign slip objects", async () => {
+    const admin = adminClient().storage.from("payment-slips");
+    const anon = anonClient().storage.from("payment-slips");
+    expect((await admin.upload("o/keep.png", png, { contentType: "image/png" })).error).toBeNull();
+    const before = await admin.download("o/keep.png");
+    expect(before.error).toBeNull();
+    const original = Buffer.from(await (before.data as Blob).arrayBuffer());
+
+    // Storage answers a remove it is not allowed to do with an empty list, not an error.
+    const removed = await anon.remove(["o/keep.png"]);
+    expect(removed.data ?? []).toEqual([]);
+
+    expect((await anon.move("o/keep.png", "o/moved.png")).error).not.toBeNull();
+    expect((await anon.copy("o/keep.png", "o/copied.png")).error).not.toBeNull();
+
+    const overwrite = await anon.upload("o/keep.png", Buffer.from("not a slip"), {
+      contentType: "image/png",
+      upsert: true,
+    });
+    expect(overwrite.error).not.toBeNull();
+    expect((await anon.update("o/keep.png", Buffer.from("not a slip"), { contentType: "image/png" })).error).not.toBeNull();
+
+    const signed = await anon.createSignedUrl("o/keep.png", 60);
+    expect(signed.error).not.toBeNull();
+    expect(signed.data).toBeNull();
+    const signedMany = await anon.createSignedUrls(["o/keep.png"], 60);
+    expect((signedMany.data ?? []).filter((entry) => entry.signedUrl)).toEqual([]);
+    expect((await anon.createSignedUploadUrl("o/new.png")).error).not.toBeNull();
+
+    const listed = await admin.list("o");
+    expect(listed.data?.map((f) => f.name)).toEqual(["keep.png"]);
+    const after = await admin.download("o/keep.png");
+    expect(Buffer.from(await (after.data as Blob).arrayBuffer()).equals(original)).toBe(true);
+  });
+
   it("anon cannot upload product images but can read public ones", async () => {
     const upload = await anonClient()
       .storage.from("product-images")
