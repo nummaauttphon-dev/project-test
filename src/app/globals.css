@@ -1,27 +1,28 @@
 @import "tailwindcss";
 
 /*
-  Design tokens. The store has no brand yet: a calm paper-and-forest palette that is easy to
-  retune. Change the values here (and STORE_NAME in src/lib/store-config.ts) to rebrand.
+  Design tokens. Demo brand "MAISON NUM": quiet luxury on warm off-white, near-black ink,
+  hairline rules and a serif display face. Change the values here (and STORE_NAME in
+  src/lib/store-config.ts) to rebrand.
   Text/background pairs below meet WCAG 2.1 AA (4.5:1 body, 3:1 for UI borders and focus).
 */
 :root {
-  --paper: #faf8f3;
-  --surface: #ffffff;
-  --sunken: #f0ece2;
-  --ink: #1c2220;
-  --ink-soft: #4f5753;
-  --line: #d9d3c4;
-  --line-strong: #8a8f89;
-  --brand: #1f5a49;
-  --brand-hover: #174638;
-  --on-brand: #ffffff;
+  --paper: #f7f5f0;
+  --surface: #fcfbf8;
+  --sunken: #ebe7de;
+  --ink: #171614;
+  --ink-soft: #57534c;
+  --line: #e0dbd0;
+  --line-strong: #8a857b;
+  --brand: #171614;
+  --brand-hover: #3b3833;
+  --on-brand: #fcfbf8;
   --notice-bg: #fdf1dc;
   --notice-line: #b7791f;
   --notice-ink: #5c3a05;
   --danger-bg: #fbe6e1;
   --danger-ink: #8a2a16;
-  --radius: 0.75rem;
+  --radius: 0.125rem;
 }
 
 @theme inline {
@@ -41,6 +42,7 @@
   --color-danger-bg: var(--danger-bg);
   --color-danger-ink: var(--danger-ink);
   --font-sans: var(--font-thai), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-thai-serif), ui-serif, Georgia, serif;
   --radius-card: var(--radius);
 }
 
@@ -58,7 +60,21 @@ body {
 :focus-visible {
   outline: 3px solid var(--brand);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 2px;
+}
+
+/* Storefront headings use the serif display face; the admin keeps the sans for scanning. */
+.storefront :is(h1, h2) {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* Thai script must not be letter-spaced (it detaches vowels and tone marks), so only the
+   Latin wordmark uses wide tracking; Thai labels stay at normal spacing. */
+.eyebrow {
+  font-size: 0.875rem;
+  color: var(--ink-soft);
 }
 
 @keyframes pulse-soft {

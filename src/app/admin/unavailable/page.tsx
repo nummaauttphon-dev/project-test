@@ -22,7 +22,7 @@ export default async function AdminUnavailablePage() {
       </p>
       <Link
         href="/admin"
-        className="inline-flex min-h-12 items-center rounded-full bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover"
+        className="inline-flex min-h-12 items-center rounded-sm bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover"
       >
         ลองใหม่อีกครั้ง
       </Link>

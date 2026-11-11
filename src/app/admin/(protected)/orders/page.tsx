@@ -25,7 +25,7 @@ function listHref(status: OrderStatus | undefined, page = 1): string {
 }
 
 const CHIP =
-  "inline-flex min-h-11 items-center rounded-full border border-line-strong px-4 font-medium hover:bg-sunken aria-[current=page]:border-brand aria-[current=page]:bg-brand aria-[current=page]:text-on-brand";
+  "inline-flex min-h-11 items-center rounded-sm border border-line-strong px-4 font-medium hover:bg-sunken aria-[current=page]:border-brand aria-[current=page]:bg-brand aria-[current=page]:text-on-brand";
 
 export default async function AdminOrdersPage({ searchParams }: PageProps<"/admin/orders">) {
   await requireAdminPage();

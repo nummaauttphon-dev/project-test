@@ -5,7 +5,7 @@ import { useActionState } from "react";
 import { startTotpEnrollmentAction, verifyTotpAction } from "@/features/admin/actions";
 
 const BUTTON_CLASS =
-  "flex min-h-12 w-full items-center justify-center rounded-full bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60";
+  "flex min-h-12 w-full items-center justify-center rounded-sm bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60";
 
 function ErrorMessage({ id, message }: { id: string; message?: string }) {
   return (

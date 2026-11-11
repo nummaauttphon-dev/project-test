@@ -10,7 +10,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export const metadata: Metadata = { title: "สินค้า" };
 
 const ADD_LINK =
-  "inline-flex min-h-12 items-center justify-center rounded-full bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover";
+  "inline-flex min-h-12 items-center justify-center rounded-sm bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover";
 
 export default async function AdminProductsPage() {
   await requireAdminPage();

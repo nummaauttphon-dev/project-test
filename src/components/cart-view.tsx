@@ -134,7 +134,7 @@ export function CartView() {
         <button
           type="button"
           onClick={() => setAttempt((n) => n + 1)}
-          className="mt-3 min-h-11 rounded-full bg-danger-ink px-5 font-semibold text-surface"
+          className="mt-3 min-h-11 rounded-sm bg-danger-ink px-5 font-semibold text-surface"
         >
           ลองใหม่
         </button>
@@ -155,7 +155,7 @@ export function CartView() {
           <p className="mt-2 text-ink-soft">เลือกสินค้าที่ถูกใจ แล้วเพิ่มลงตะกร้าได้เลย</p>
           <Link
             href="/"
-            className="mt-6 inline-flex min-h-11 items-center rounded-full bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
+            className="mt-6 inline-flex min-h-11 items-center rounded-sm bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
           >
             เลือกดูสินค้า
           </Link>
@@ -231,7 +231,7 @@ export function CartView() {
         </dl>
         <Link
           href="/checkout"
-          className="mt-4 flex min-h-12 w-full items-center justify-center rounded-full bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover"
+          className="mt-4 flex min-h-12 w-full items-center justify-center rounded-sm bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover"
         >
           ไปหน้าชำระเงิน
         </Link>

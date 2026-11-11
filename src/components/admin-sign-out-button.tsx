@@ -5,7 +5,7 @@ export function AdminSignOutButton() {
     <form action={signOutAction}>
       <button
         type="submit"
-        className="inline-flex min-h-11 items-center rounded-full border border-line-strong px-5 font-semibold hover:bg-sunken"
+        className="inline-flex min-h-11 items-center rounded-sm border border-line-strong px-5 font-semibold hover:bg-sunken"
       >
         ออกจากระบบ
       </button>

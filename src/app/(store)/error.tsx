@@ -12,7 +12,7 @@ export default function StoreError({ retry }: { error: Error & { digest?: string
         <button
           type="button"
           onClick={() => retry()}
-          className="inline-flex min-h-11 items-center rounded-full bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
+          className="inline-flex min-h-11 items-center rounded-sm bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
         >
           ลองอีกครั้ง
         </button>

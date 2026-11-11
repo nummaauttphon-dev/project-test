@@ -12,7 +12,7 @@ export function RefreshButton() {
       type="button"
       disabled={pending}
       onClick={() => startTransition(() => router.refresh())}
-      className="inline-flex min-h-11 items-center rounded-full border border-line-strong px-5 font-semibold hover:bg-sunken disabled:opacity-60"
+      className="inline-flex min-h-11 items-center rounded-sm border border-line-strong px-5 font-semibold hover:bg-sunken disabled:opacity-60"
     >
       {pending ? "กำลังตรวจสอบ…" : "ตรวจสอบสถานะล่าสุด"}
     </button>

@@ -31,7 +31,7 @@ export function CopyLinkButton() {
       <button
         type="button"
         onClick={copy}
-        className="inline-flex min-h-11 items-center rounded-full border border-brand px-5 font-semibold text-brand hover:bg-sunken"
+        className="inline-flex min-h-11 items-center rounded-sm border border-brand px-5 font-semibold text-brand hover:bg-sunken"
       >
         คัดลอกลิงก์คำสั่งซื้อ
       </button>

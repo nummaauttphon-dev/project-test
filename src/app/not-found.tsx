@@ -12,7 +12,7 @@ export default function RootNotFound() {
         <p className="mt-2 text-ink-soft">ลิงก์นี้อาจไม่ถูกต้อง หรือหน้านี้ถูกนำออกแล้ว</p>
         <Link
           href="/"
-          className="mt-6 inline-flex min-h-11 items-center rounded-full bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
+          className="mt-6 inline-flex min-h-11 items-center rounded-sm bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
         >
           กลับไปหน้าร้าน
         </Link>

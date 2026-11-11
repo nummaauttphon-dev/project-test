@@ -56,7 +56,7 @@ export function AdminLoginForm({ initialError }: { initialError?: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="flex min-h-12 w-full items-center justify-center rounded-full bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60"
+        className="flex min-h-12 w-full items-center justify-center rounded-sm bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60"
       >
         {pending ? "กำลังตรวจสอบ…" : "เข้าสู่ระบบ"}
       </button>

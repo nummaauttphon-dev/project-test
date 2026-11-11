@@ -9,11 +9,11 @@ import type { ActionResult } from "@/lib/result";
 const GENERIC_ERROR = "ทำรายการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง";
 
 export const PRIMARY =
-  "inline-flex min-h-12 items-center justify-center rounded-full bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60";
+  "inline-flex min-h-12 items-center justify-center rounded-sm bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60";
 export const SECONDARY =
-  "inline-flex min-h-12 items-center justify-center rounded-full border border-line-strong bg-surface px-6 font-semibold hover:bg-sunken disabled:opacity-60";
+  "inline-flex min-h-12 items-center justify-center rounded-sm border border-line-strong bg-surface px-6 font-semibold hover:bg-sunken disabled:opacity-60";
 export const DANGER =
-  "inline-flex min-h-12 items-center justify-center rounded-full border border-danger-ink bg-danger-bg px-6 font-semibold text-danger-ink hover:bg-surface disabled:opacity-60";
+  "inline-flex min-h-12 items-center justify-center rounded-sm border border-danger-ink bg-danger-bg px-6 font-semibold text-danger-ink hover:bg-surface disabled:opacity-60";
 export const FIELD =
   "mt-1 block w-full rounded-lg border border-line-strong bg-surface px-3 py-2 text-base aria-[invalid=true]:border-danger-ink";
 

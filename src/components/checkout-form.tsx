@@ -281,7 +281,7 @@ export function CheckoutForm() {
           {placed.mismatch ? null : <p>กำลังพาไปหน้าคำสั่งซื้อ…</p>}
           <Link
             href={`/orders/${placed.token}`}
-            className="mt-3 inline-flex min-h-11 items-center rounded-full bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
+            className="mt-3 inline-flex min-h-11 items-center rounded-sm bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
           >
             ไปที่หน้าคำสั่งซื้อ
           </Link>
@@ -312,7 +312,7 @@ export function CheckoutForm() {
             setLoad({ state: "loading" });
             setAttempt((n) => n + 1);
           }}
-          className="mt-3 min-h-11 rounded-full bg-danger-ink px-5 font-semibold text-surface"
+          className="mt-3 min-h-11 rounded-sm bg-danger-ink px-5 font-semibold text-surface"
         >
           ลองใหม่
         </button>
@@ -329,7 +329,7 @@ export function CheckoutForm() {
           <p className="mt-2 text-ink-soft">เพิ่มสินค้าลงตะกร้าก่อนจึงจะสั่งซื้อได้</p>
           <Link
             href="/"
-            className="mt-6 inline-flex min-h-11 items-center rounded-full bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
+            className="mt-6 inline-flex min-h-11 items-center rounded-sm bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover"
           >
             เลือกดูสินค้า
           </Link>
@@ -431,7 +431,7 @@ export function CheckoutForm() {
         <button
           type="submit"
           disabled={pending}
-          className="flex min-h-12 w-full items-center justify-center rounded-full bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60"
+          className="flex min-h-12 w-full items-center justify-center rounded-sm bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60"
         >
           {pending ? "กำลังสั่งซื้อ…" : "ยืนยันสั่งซื้อ"}
         </button>

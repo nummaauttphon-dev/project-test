@@ -22,7 +22,7 @@ export function AdminNav() {
               <Link
                 href={href}
                 aria-current={current ? "page" : undefined}
-                className="inline-flex min-h-11 items-center rounded-full px-4 font-medium hover:bg-sunken aria-[current=page]:bg-sunken aria-[current=page]:font-semibold"
+                className="inline-flex min-h-11 items-center rounded-sm px-4 font-medium hover:bg-sunken aria-[current=page]:bg-sunken aria-[current=page]:font-semibold"
               >
                 {label}
               </Link>

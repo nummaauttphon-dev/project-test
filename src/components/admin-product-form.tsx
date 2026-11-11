@@ -197,7 +197,7 @@ export function ProductForm({ product }: { product?: ProductFormValues }) {
               type="file"
               accept="image/jpeg,image/png,image/webp"
               onChange={() => setImageError(undefined)}
-              className="mt-2 block w-full text-base file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-full file:border-0 file:bg-sunken file:px-5 file:font-semibold file:text-ink"
+              className="mt-2 block w-full text-base file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-sm file:border-0 file:bg-sunken file:px-5 file:font-semibold file:text-ink"
             />
           )}
         </FormField>

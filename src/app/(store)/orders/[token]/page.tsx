@@ -27,7 +27,7 @@ const HEADLINES: Record<OrderStatus, string> = {
 };
 
 const LINK_BUTTON =
-  "inline-flex min-h-11 items-center rounded-full bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover";
+  "inline-flex min-h-11 items-center rounded-sm bg-brand px-6 font-semibold text-on-brand hover:bg-brand-hover";
 
 /** Generated on the server; only the image leaves it, never PROMPTPAY_ID itself. */
 async function buildQr(view: OrderView): Promise<string | null> {
@@ -113,7 +113,7 @@ export default async function OrderPage({ params }: PageProps<"/orders/[token]">
                 <a
                   href={qr}
                   download={`promptpay-${view.orderNumber}.png`}
-                  className="inline-flex min-h-11 items-center rounded-full border border-brand px-5 font-semibold text-brand hover:bg-sunken"
+                  className="inline-flex min-h-11 items-center rounded-sm border border-brand px-5 font-semibold text-brand hover:bg-sunken"
                 >
                   บันทึกรูป QR
                 </a>

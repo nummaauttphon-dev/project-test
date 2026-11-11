@@ -70,7 +70,7 @@ export function SlipUploadForm({ token }: { token: string }) {
           disabled={pending || done}
           aria-describedby={error ? "slip-hint slip-error" : "slip-hint"}
           aria-invalid={error ? true : undefined}
-          className="mt-2 block w-full text-base file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-full file:border-0 file:bg-sunken file:px-5 file:font-semibold file:text-ink"
+          className="mt-2 block w-full text-base file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-sm file:border-0 file:bg-sunken file:px-5 file:font-semibold file:text-ink"
         />
         <p className="mt-1 text-sm" data-testid="slip-file-name">
           {file ? `ไฟล์ที่เลือก: ${file.name}` : "ยังไม่ได้เลือกไฟล์"}
@@ -89,7 +89,7 @@ export function SlipUploadForm({ token }: { token: string }) {
       <button
         type="submit"
         disabled={!file || pending || done}
-        className="flex min-h-12 w-full items-center justify-center rounded-full bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60"
+        className="flex min-h-12 w-full items-center justify-center rounded-sm bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover disabled:opacity-60"
       >
         {pending ? "กำลังส่งสลิป…" : error ? "ลองส่งสลิปอีกครั้ง" : "ส่งสลิป"}
       </button>

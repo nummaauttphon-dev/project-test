@@ -15,11 +15,11 @@ export function AddToCart({ productId, stock }: { productId: string; stock: numb
   if (stock <= 0) {
     return (
       <div>
-        <p className="inline-block rounded-md bg-ink px-3 py-1.5 font-semibold text-surface">สินค้าหมด</p>
+        <p className="inline-block border border-ink px-3 py-1 text-sm text-ink">สินค้าหมด</p>
         <button
           type="button"
           disabled
-          className="mt-4 block min-h-12 w-full rounded-full bg-sunken px-6 font-semibold text-ink-soft"
+          className="mt-4 block min-h-12 w-full rounded-sm bg-sunken px-6 font-semibold text-ink-soft"
         >
           เพิ่มลงตะกร้าไม่ได้
         </button>
@@ -80,7 +80,7 @@ export function AddToCart({ productId, stock }: { productId: string; stock: numb
         type="button"
         onClick={add}
         disabled={!ready}
-        className="mt-4 block min-h-12 w-full rounded-full bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover disabled:cursor-wait disabled:opacity-60"
+        className="mt-4 block min-h-12 w-full rounded-sm bg-brand px-6 text-lg font-semibold text-on-brand hover:bg-brand-hover disabled:cursor-wait disabled:opacity-60"
       >
         เพิ่มลงตะกร้า
       </button>
