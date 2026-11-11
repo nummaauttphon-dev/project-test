@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
-  Design tokens. Demo brand "MAISON NUM": quiet luxury on warm off-white, near-black ink,
+  Design tokens. Demo brand "MAI SON ARAI": quiet luxury on warm off-white, near-black ink,
   hairline rules and a serif display face. Change the values here (and STORE_NAME in
   src/lib/store-config.ts) to rebrand.
   Text/background pairs below meet WCAG 2.1 AA (4.5:1 body, 3:1 for UI borders and focus).
